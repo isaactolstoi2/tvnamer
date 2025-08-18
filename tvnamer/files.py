@@ -65,6 +65,12 @@ def intepret_year(value):
     else:
         return 1900 + year
 
+def _remove_year(seriesname):
+    year_in_brackets = re.compile(r"(.*)\((\d+)\).*")
+    result = year_in_brackets.match(seriesname)
+    if result is None:
+        return seriesname,None
+    return result[1].strip(),result[2].strip()
 
 def _clean_extracted_series_name(seriesname):
     # type: (str) -> str
@@ -350,6 +356,8 @@ class FileParser(object):
 
                 if seriesname is not None:
                     seriesname = _clean_extracted_series_name(seriesname)
+                    seriesname,year = _remove_year(seriesname)
+
                     seriesname = _replace_input_series_name(seriesname)
 
                 extra_values = match.groupdict()
