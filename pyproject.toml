@@ -1,0 +1,31 @@
+[project]
+name = "tvnamer"
+dynamic = ["version"]
+description = "Automatic TV episode namer"
+readme = "README.md"
+license = "unlicense"
+authors = [
+    { name = "dbr/Ben" },
+]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.8",
+    "Topic :: Multimedia",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "tvdb_api>=3,<4",
+]
+
+[project.scripts]
+tvnamer = "tvnamer.main:main"
+
+[project.urls]
+Homepage = "http://github.com/dbr/tvnamer"
+
+
+
