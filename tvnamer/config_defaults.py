@@ -17,6 +17,7 @@ if typing.TYPE_CHECKING:
 
     TypedDefaults = TypedDict('TypedDefaults', {
         'tvdb_api_key': Optional[str],
+        'mode': str,
         'select_first': bool,
         'always_rename': bool,
         'batch': bool,
@@ -77,6 +78,9 @@ if typing.TYPE_CHECKING:
 defaults = {
     # Custom API key from www.thetvdb.com - if None, uses tvnamer's default key
     'tvdb_api_key': None,
+
+    # mode can be move, copy, symlink
+    'mode': 'move',
 
     # Select first series search result
     'select_first': False,

@@ -21,8 +21,8 @@ from typing import List, Union, Optional
 from tvnamer import cliarg_parser, __version__
 from tvnamer.config_defaults import defaults
 from tvnamer.config import Config
-from .files import FileFinder, FileParser, Renamer, _apply_replacements_input
-from .utils import (
+from tvnamer.files import FileFinder, FileParser, Renamer, _apply_replacements_input
+from tvnamer.utils import (
     warn,
     format_episode_numbers,
     make_valid_filename,
@@ -107,46 +107,20 @@ def get_move_destination(episode):
     return dest_dir
 
 
-def do_rename_file(cnamer, new_name):
-    # type: (Renamer, str) -> None
-    """Renames the file. cnamer should be Renamer instance,
-    new_name should be string containing new filename.
-    """
-    try:
-        cnamer.new_path(
-            new_fullpath=new_name,
-            force=Config["overwrite_destination_on_rename"],
-            leave_symlink=Config["leave_symlink"],
-        )
-    except OSError as e:
-        if Config["skip_behaviour"] == "exit":
-            warn("Exiting due to error: %s" % e)
-            raise SkipBehaviourAbort()
-        warn("Skipping file due to error: %s" % e)
-
-
-def do_move_file(cnamer, dest_dir=None, dest_filepath=None, get_path_preview=False):
-    # type: (Renamer, Optional[str], Optional[str], bool) -> Optional[str]
-    """Moves file to dest_dir, or to dest_filepath
+def do_file_operation(cnamer,mode, dest_dir=None, dest_filepath=None, get_path_preview=False):
+    # type: (Renamer,str, Optional[str], Optional[str], bool) -> Optional[str]
+    """Moves, rename, copy, or symlink file to dest_dir, or to dest_filepath
     """
 
     if (dest_dir, dest_filepath).count(None) != 1:
         raise ValueError("Specify only dest_dir or dest_filepath")
 
-    if not Config["move_files_enable"]:
-        raise ValueError("move_files feature is disabled but do_move_file was called")
-
-    if Config["move_files_destination"] is None:
-        raise ValueError(
-            "Config value for move_files_destination cannot be None if move_files_enabled is True"
-        )
-
     try:
         return cnamer.new_path(
             new_path=dest_dir,
             new_fullpath=dest_filepath,
-            always_move=Config["always_move"],
-            leave_symlink=Config["leave_symlink"],
+            mode=mode,
+            add_link_back=Config["leave_symlink"],
             get_path_preview=get_path_preview,
             force=Config["overwrite_destination_on_move"],
         )
@@ -265,22 +239,7 @@ def process_file(tvdb_instance, episode):
             print("New filename: %s" % new_name)
 
             if Config["dry_run"]:
-                print("%s will be renamed to %s" % (episode.fullfilename, new_name))
-                if Config["move_files_enable"]:
-                    print(
-                        "%s will be moved to %s"
-                        % (new_name, get_move_destination(episode))
-                    )
-                return
-            elif Config["always_rename"]:
-                do_rename_file(cnamer, new_name)
-                if Config["move_files_enable"]:
-                    if Config["move_files_destination_is_filepath"]:
-                        do_move_file(
-                            cnamer=cnamer, dest_filepath=get_move_destination(episode)
-                        )
-                    else:
-                        do_move_file(cnamer=cnamer, dest_dir=get_move_destination(episode))
+                print("%s will be %s'ed to %s" % (episode.fullfilename, Config["mode"],new_name))
                 return
 
             ans = confirm("Rename?", options=["y", "n", "a", "q"], default="y")
@@ -301,30 +260,8 @@ def process_file(tvdb_instance, episode):
                 print("Invalid input, skipping")
 
             if should_rename:
-                do_rename_file(cnamer, new_name)
+                do_file_operation(cnamer,Config["mode"], new_name)
 
-    if should_rename and Config["move_files_enable"]:
-        new_path = get_move_destination(episode)
-        if Config["dry_run"]:
-            print("%s will be moved to %s" % (new_name, get_move_destination(episode)))
-            return
-
-        if Config["move_files_destination_is_filepath"]:
-            do_move_file(cnamer=cnamer, dest_filepath=new_path, get_path_preview=True)
-        else:
-            do_move_file(cnamer=cnamer, dest_dir=new_path, get_path_preview=True)
-
-        if not Config["batch"] and Config["move_files_confirmation"]:
-            ans = confirm("Move file?", options=["y", "n", "q"], default="y")
-        else:
-            ans = "y"
-
-        if ans == "y":
-            print("Moving file")
-            do_move_file(cnamer, new_path)
-        elif ans == "q":
-            print("Quitting")
-            raise UserAbort("user exited with q")
 
 
 def find_files(paths):

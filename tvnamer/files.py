@@ -450,24 +450,17 @@ class Renamer(object):
         new_path=None, # type: Optional[str]
         new_fullpath=None, # type: Optional[str]
         force=False, # type: bool
-        always_copy=False, # type: bool
-        always_move=False, # type: bool
-        leave_symlink=False, # type: bool
+        mode="copy", # type: str
+        add_link_back=False, # type: bool
         get_path_preview=False, # type: bool
     ):
         # type: (...) -> Optional[str]
         """Moves the file to a new path.
 
-        If it is on the same partition, it will be moved (unless always_copy is True)
-        If it is on a different partition, it will be copied, and the original
-        only deleted if always_move is True.
         If the target file already exists, it will raise OSError unless force is True.
         If it was moved, a symlink will be left behind with the original name
         pointing to the file's new destination if leave_symlink is True.
         """
-
-        if always_copy and always_move:
-            raise ValueError("Both always_copy and always_move cannot be specified")
 
         if (new_path is None and new_fullpath is None) or (
             new_path is not None and new_fullpath is not None
@@ -506,21 +499,20 @@ class Renamer(object):
             # If the destination exists, raise exception unless force is True
             if not force:
                 raise OSError(
-                    "File %s already exists, not forcefully moving %s"
+                    "File %s already exists, no change. add --force to overwrite %s"
                     % (new_fullpath, self.filename)
                 )
 
-        if always_copy:
-            # Same partition, but forced to copy
+        if mode=="copy":
             copy_file(self.filename, new_fullpath)
-        else:
-            # Same partition, just rename the file to move it
+        elif mode =="move":
             rename_file(self.filename, new_fullpath)
-
             # Leave a symlink behind if configured to do so
-            if leave_symlink:
+            if add_link_back:
                 symlink_file(new_fullpath, self.filename)
 
-        self.filename = new_fullpath
+        elif mode=="symlink":
+            symlink_file(self.filename, new_fullpath)
 
+        self.filename = new_fullpath
         return None # TODO: Remove get_path_preview argument
