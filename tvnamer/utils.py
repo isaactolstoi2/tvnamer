@@ -128,7 +128,8 @@ def make_valid_filename(
         # generally cause weird behaviour, so treat it as invalid.
         blacklist = r"/:"
     elif sysname in ['Linux', 'FreeBSD']:
-        blacklist = r"/"
+        # blacklist = r"/"
+        blacklist = None
     else:
         # platform.system docs say it could also return "Windows" or "Java".
         # Failsafe and use Windows sanitisation for Java, as it could be any
@@ -139,8 +140,9 @@ def make_valid_filename(
     if custom_blacklist is not None:
         blacklist += custom_blacklist
 
-    # Replace every blacklisted character with a underscore
-    value = re.sub("[%s]" % re.escape(blacklist), replace_with, value)
+    if blacklist is not None:
+        # Replace every blacklisted character with a underscore
+        value = re.sub("[%s]" % re.escape(blacklist), replace_with, value)
 
     # Remove any trailing whitespace
     value = value.strip()
