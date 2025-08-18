@@ -19,6 +19,7 @@ import tvdb_api
 from typing import List, Union, Optional
 
 from tvnamer import cliarg_parser, __version__
+from tvnamer import kvstore
 from tvnamer.config_defaults import defaults
 from tvnamer.config import Config
 from tvnamer.files import FileFinder, FileParser, Renamer, _apply_replacements_input
@@ -162,6 +163,14 @@ def confirm(question, options, default="y"):
         elif ans == "":
             return default
 
+def lookup_previous_choice(should_lookup: bool,fullfilename :str):
+    """lookup in database if fullfilname has a entry, to avoid re-asking or the same file
+    if should_lookup is false this method is a noop
+    """
+    if not should_lookup:
+        return None
+    return kvstore.lookup(fullfilename)
+
 
 def process_file(tvdb_instance, episode):
     # type: (tvdb_api.Tvdb, BaseInfo) -> None
@@ -180,12 +189,12 @@ def process_file(tvdb_instance, episode):
         episode.seriesname = Config["force_name"]
 
     print("# Detected series: %s (%s)" % (episode.seriesname, episode.number_string()))
-
+    series_id = Config["series_id"] or lookup_previous_choice(Config['remember_choice'],episode.fullfilename)
     try:
         episode.populate_from_tvdb(
             tvdb_instance,
             force_name=Config["force_name"],
-            series_id=Config["series_id"],
+            series_id=series_id,
         )
     except (DataRetrievalError, ShowNotFound) as errormsg:
         if Config["always_rename"] and Config["skip_file_on_error"] is True:
@@ -206,46 +215,40 @@ def process_file(tvdb_instance, episode):
             return
 
         warn("%s" % (errormsg))
-
+    kvstore.store(episode.fullfilename,episode.seriesid)
     cnamer = Renamer(episode.fullpath)
 
     should_rename = False
 
-    if Config["move_files_only"]:
+    new_name = episode.generate_filename()
+    if new_name == episode.fullfilename:
+        print("#" * 20)
+        print("Existing filename is correct: %s" % episode.fullfilename)
+        print("#" * 20)
 
-        new_name = episode.fullfilename
         should_rename = True
 
     else:
-        new_name = episode.generate_filename()
-        if new_name == episode.fullfilename:
-            print("#" * 20)
-            print("Existing filename is correct: %s" % episode.fullfilename)
-            print("#" * 20)
+        print("#" * 20)
+        print("Old filename: %s" % episode.fullfilename)
 
-            should_rename = True
+        if len(Config["output_filename_replacements"]) > 0:
+            # Show filename without replacements
+            print(
+                "Before custom output replacements: %s"
+                % (episode.generate_filename(preview_orig_filename=True))
+            )
 
-        else:
-            print("#" * 20)
-            print("Old filename: %s" % episode.fullfilename)
+        print("New filename: %s" % new_name)
 
-            if len(Config["output_filename_replacements"]) > 0:
-                # Show filename without replacements
-                print(
-                    "Before custom output replacements: %s"
-                    % (episode.generate_filename(preview_orig_filename=True))
-                )
+        if Config["dry_run"]:
+            print("%s will be %s'ed to %s" % (episode.fullfilename, Config["mode"],new_name))
+            return
+        if Config['always_rename'] == False:
+            should_rename = ask_for_rename()
 
-            print("New filename: %s" % new_name)
-
-            if Config["dry_run"]:
-                print("%s will be %s'ed to %s" % (episode.fullfilename, Config["mode"],new_name))
-                return
-            if Config['always_rename'] == False:
-                should_rename = ask_for_rename()
-
-            if should_rename:
-                do_file_operation(cnamer,Config["mode"], new_name)
+        if should_rename:
+            do_file_operation(cnamer,Config["mode"], new_name)
 
 def ask_for_rename():
     should_rename = False
@@ -456,11 +459,6 @@ def main():
 
     # Update global config object
     Config.update(opts.__dict__)
-
-    if Config["move_files_only"] and not Config["move_files_enable"]:
-        opter.error(
-            "Parameter move_files_enable cannot be set to false while parameter move_only is set to true."
-        )
 
     if Config["titlecase_filename"] and Config["lowercase_filename"]:
         warnings.warn(

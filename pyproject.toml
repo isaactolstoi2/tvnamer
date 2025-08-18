@@ -19,6 +19,7 @@ classifiers = [
 ]
 dependencies = [
     "tvdb_api @ git+ssh://git@github.com/isaactolstoi2/tvdb_api.git",
+    "sqlalchemy",
 ]
 
 [project.scripts]

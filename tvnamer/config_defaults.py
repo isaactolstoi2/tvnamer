@@ -15,9 +15,11 @@ if typing.TYPE_CHECKING:
         "replacement": str,
     })
 
-    TypedDefaults = TypedDict('TypedDefaults', {
+    TypedDefaults = typing.TypedDict('TypedDefaults', {
         'tvdb_api_key': Optional[str],
         'mode': str,
+        'remember_choice':bool,
+        'kvstore':str,
         'select_first': bool,
         'always_rename': bool,
         'batch': bool,
@@ -48,9 +50,7 @@ if typing.TYPE_CHECKING:
         'move_files_destination_is_filepath': bool,
         'move_files_destination': str,
         'move_files_destination_date': str,
-        'always_move': bool,
         'leave_symlink': bool,
-        'move_files_only': bool,
         'filename_patterns': List[str],
         'filename_with_episode': str,
         'filename_without_episode': str,
@@ -81,6 +81,12 @@ defaults = {
 
     # mode can be move, copy, symlink
     'mode': 'move',
+
+    # remember choice for given file, don't aks or check tvdb again
+    'remember_choice':True,
+
+    # path to kvstore, a sqlite db which stores the choices
+    'kvstore':'kvstore.sqlite',
 
     # Select first series search result
     'select_first': False,
@@ -209,20 +215,10 @@ defaults = {
     # - %(day)s
     'move_files_destination_date': '.',
 
-    # Force the move-files feature to always move the file.
-    #
-    # If False, when a file is moved between partitions (or from a
-    # network volume), the original is left untouched (i.e it is
-    # copied).  If True, this will delete the file from the original
-    # volume, after the copy has complete.
-    'always_move': False,
 
     # Whenever a file is moved leave a symlink to the new file behind, named
     # after the original file.
     'leave_symlink': False,
-
-    # Allow user to copy files to specified move location without renaming files.
-    'move_files_only': False,
 
     # Patterns to parse input filenames with
     'filename_patterns': [

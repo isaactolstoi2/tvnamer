@@ -9,4 +9,4 @@ if TYPE_CHECKING:
 
 from tvnamer.config_defaults import defaults
 
-Config = dict(defaults) # type: TypedDefaults
+Config = dict(defaults) # type: dict

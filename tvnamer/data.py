@@ -213,7 +213,6 @@ class BaseInfo(metaclass=ABCMeta):
                 show = tvdb_instance[force_name or self.seriesname]
             else:
                 series_id = int(series_id)
-                tvdb_instance._getShowData(series_id, Config['language'])
                 show = tvdb_instance[series_id]
             if show is None:
                 print("Enter search term or [Enter] to skip:")
@@ -223,14 +222,15 @@ class BaseInfo(metaclass=ABCMeta):
                 show = tvdb_instance[search_term]
         except tvdb_api.TvdbError as errormsg:
             raise DataRetrievalError("Error with www.thetvdb.com: %s" % errormsg)
-        except tvdb_api.tvdb_shownotfound:
+        except tvdb_api.TvdbShowNotFound:
             # No such series found.
             raise ShowNotFound("Show %s not found on www.thetvdb.com" % self.seriesname)
-        except tvdb_api.tvdb_userabort as error:
+        except tvdb_api.TvdbUserAbort as error:
             raise UserAbort("%s" % error)
         else:
             # Series was found, use corrected series name
             self.seriesname = _replace_output_series_name(show['seriesName'])
+            self.seriesid = show.data['id']
 
         if isinstance(self, DatedEpisodeInfo):
             # Date-based episode
