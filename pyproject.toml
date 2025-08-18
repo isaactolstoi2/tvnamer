@@ -18,7 +18,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "tvdb_api>=3,<4",
+    "tvdb_api @ git+ssh://git@github.com/isaactolstoi2/tvdb_api.git",
 ]
 
 [project.scripts]

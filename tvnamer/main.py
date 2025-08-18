@@ -241,27 +241,31 @@ def process_file(tvdb_instance, episode):
             if Config["dry_run"]:
                 print("%s will be %s'ed to %s" % (episode.fullfilename, Config["mode"],new_name))
                 return
-
-            ans = confirm("Rename?", options=["y", "n", "a", "q"], default="y")
-
-            if ans == "a":
-                print("Always renaming")
-                Config["always_rename"] = True
-                should_rename = True
-            elif ans == "q":
-                print("Quitting")
-                raise UserAbort("User exited with q")
-            elif ans == "y":
-                print("Renaming")
-                should_rename = True
-            elif ans == "n":
-                print("Skipping")
-            else:
-                print("Invalid input, skipping")
+            if Config['always_rename'] == False:
+                should_rename = ask_for_rename()
 
             if should_rename:
                 do_file_operation(cnamer,Config["mode"], new_name)
 
+def ask_for_rename():
+    should_rename = False
+    ans = confirm("Rename?", options=["y", "n", "a", "q"], default="y")
+
+    if ans == "a":
+        print("Always renaming")
+        Config["always_rename"] = True
+        should_rename = True
+    elif ans == "q":
+        print("Quitting")
+        raise UserAbort("User exited with q")
+    elif ans == "y":
+        print("Renaming")
+        should_rename = True
+    elif ans == "n":
+        print("Skipping")
+    else:
+        print("Invalid input, skipping")
+    return should_rename
 
 
 def find_files(paths):
@@ -353,7 +357,6 @@ def tvnamer(paths):
 
     tvdb_instance = tvdb_api.Tvdb(
         interactive=not Config["select_first"],
-        search_all_languages=Config["search_all_languages"],
         language=Config["language"],
         dvdorder=dvdorder,
         cache=cache,
