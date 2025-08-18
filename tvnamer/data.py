@@ -215,7 +215,13 @@ class BaseInfo(metaclass=ABCMeta):
                 series_id = int(series_id)
                 tvdb_instance._getShowData(series_id, Config['language'])
                 show = tvdb_instance[series_id]
-        except tvdb_api.tvdb_error as errormsg:
+            if show is None:
+                print("Enter search term or [Enter] to skip:")
+                search_term = input()
+                if len(search_term)==0:
+                    raise tvdb_api.TvdbShowNotFound("User chose to skip")
+                show = tvdb_instance[search_term]
+        except tvdb_api.TvdbError as errormsg:
             raise DataRetrievalError("Error with www.thetvdb.com: %s" % errormsg)
         except tvdb_api.tvdb_shownotfound:
             # No such series found.
@@ -242,7 +248,7 @@ class BaseInfo(metaclass=ABCMeta):
                             % (cepno, len(sr))
                         )
                     epnames.append(sr[0]['episodeName'])
-                except tvdb_api.tvdb_episodenotfound:
+                except tvdb_api.TvdbEpisodeNotFound:
                     raise EpisodeNotFound(
                         "Episode that aired on %s could not be found" % (cepno)
                     )
@@ -260,13 +266,13 @@ class BaseInfo(metaclass=ABCMeta):
             try:
                 episodeinfo = show[seasonnumber][cepno]
 
-            except tvdb_api.tvdb_seasonnotfound:
+            except tvdb_api.TvdbSeasonNotFound:
                 raise SeasonNotFound(
                     "Season %s of show %s could not be found"
                     % (seasonnumber, self.seriesname)
                 )
 
-            except tvdb_api.tvdb_episodenotfound:
+            except tvdb_api.TvdbEpisodeNotFound:
                 # Try to search by absolute number
                 sr = show.search(cepno, "absoluteNumber")
                 if len(sr) > 1:
@@ -290,7 +296,7 @@ class BaseInfo(metaclass=ABCMeta):
                         % (cepno, self.seriesname, seasonnumber)
                     )
 
-            except tvdb_api.tvdb_attributenotfound:
+            except tvdb_api.TvdbAttributeNotFound:
                 raise EpisodeNameNotFound("Could not find episode name for %s" % cepno)
             else:
                 epnames.append(episodeinfo['episodeName'])
