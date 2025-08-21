@@ -169,53 +169,84 @@ def lookup_previous_choice(should_lookup: bool,fullfilename :str):
     """
     if not should_lookup:
         return None
-    return kvstore.lookup(fullfilename)
+    result = kvstore.lookup(fullfilename)
+    LOG.debug(f"kvstore lookup {fullfilename}: {result}")
+    return result
 
+def store_new_choice(fullfilename,seriesid):
+    LOG.debug(f"kvstore store {fullfilename}: {seriesid}")
+    kvstore.store(fullfilename,seriesid)
+
+def ask_for_seriesname(episode):
+    print(f"Current file: {episode.fullpath}")
+    print("Please enter series name:")
+    return input().strip()
 
 def process_file(tvdb_instance, episode):
     # type: (tvdb_api.Tvdb, BaseInfo) -> None
     """Gets episode name, prompts user for input
     """
-    print("#" * 20)
-    print("# Processing file: %s" % episode.fullfilename)
+    episode = get_episode_name_maybe_prompt(tvdb_instance, episode)
+    if episode is None:
+        return
+    generate_filename_an_rename(episode)
 
-    if len(Config["input_filename_replacements"]) > 0:
-        replaced = _apply_replacements_input(episode.fullfilename)
-        print("# With custom replacements: %s" % (replaced))
+def get_episode_name_maybe_prompt(tvdb_instance, episode):
+    retries = 1
+    force_name = None
+    while (retries >0):
 
-    # Use force_name option. Done after input_filename_replacements so
-    # it can be used to skip the replacements easily
-    if Config["force_name"] is not None:
-        episode.seriesname = Config["force_name"]
+        print("#" * 20)
+        print("# Processing file: %s" % episode.fullfilename)
 
-    print("# Detected series: %s (%s)" % (episode.seriesname, episode.number_string()))
-    series_id = Config["series_id"] or lookup_previous_choice(Config['remember_choice'],episode.fullfilename)
-    try:
-        episode.populate_from_tvdb(
-            tvdb_instance,
-            force_name=Config["force_name"],
-            series_id=series_id,
-        )
-    except (DataRetrievalError, ShowNotFound) as errormsg:
-        if Config["always_rename"] and Config["skip_file_on_error"] is True:
-            if Config["skip_behaviour"] == "exit":
-                warn("Exiting due to error: %s" % errormsg)
-                raise SkipBehaviourAbort()
-            warn("Skipping file due to error: %s" % errormsg)
-            return
-        else:
+        if len(Config["input_filename_replacements"]) > 0:
+            replaced = _apply_replacements_input(episode.fullfilename)
+            print("# With custom replacements: %s" % (replaced))
+
+        # Use force_name option. Done after input_filename_replacements so
+        # it can be used to skip the replacements easily
+        if Config["force_name"] is not None:
+            episode.seriesname = Config["force_name"]
+
+        print("# Detected series: %s (%s)" % (episode.seriesname, episode.number_string()))
+        series_id = Config["series_id"] or lookup_previous_choice(Config['remember_choice'],episode.fullfilename)
+        try:
+            episode.populate_from_tvdb(
+                tvdb_instance,
+                force_name=Config["force_name"] or force_name,
+                series_id=series_id,
+            )
+        except (DataRetrievalError, ShowNotFound) as errormsg:
+            if Config["always_rename"] and Config["skip_file_on_error"] is True:
+                if Config["skip_behaviour"] == "exit":
+                    warn("Exiting due to error: %s" % errormsg)
+                    raise SkipBehaviourAbort()
+                if Config["skip_behaviour"] == "ask":
+                    print(errormsg)
+                    force_name = ask_for_seriesname(episode)
+                    if len(force_name)>1:
+                        retries+=1
+                else:
+                    warn("Skipping file due to error: %s" % errormsg)
+                    return
+            else:
+                warn("%s" % (errormsg))
+        except (SeasonNotFound, EpisodeNotFound, EpisodeNameNotFound) as errormsg:
+            # Show was found, so use corrected series name
+            if Config["always_rename"] and Config["skip_file_on_error"]:
+                if Config["skip_behaviour"] == "exit":
+                    warn("Exiting due to error: %s" % errormsg)
+                    raise SkipBehaviourAbort()
+                warn("Skipping file due to error: %s" % errormsg)
+                return
+
             warn("%s" % (errormsg))
-    except (SeasonNotFound, EpisodeNotFound, EpisodeNameNotFound) as errormsg:
-        # Show was found, so use corrected series name
-        if Config["always_rename"] and Config["skip_file_on_error"]:
-            if Config["skip_behaviour"] == "exit":
-                warn("Exiting due to error: %s" % errormsg)
-                raise SkipBehaviourAbort()
-            warn("Skipping file due to error: %s" % errormsg)
-            return
+        retries-=1
+    if 'seriesid' in episode.__dict__:
+        store_new_choice(episode.fullfilename,episode.seriesid or None)
+    return episode
 
-        warn("%s" % (errormsg))
-    kvstore.store(episode.fullfilename,episode.seriesid)
+def generate_filename_an_rename(episode):
     cnamer = Renamer(episode.fullpath)
 
     should_rename = False
@@ -249,6 +280,7 @@ def process_file(tvdb_instance, episode):
 
         if should_rename:
             do_file_operation(cnamer,Config["mode"], new_name)
+
 
 def ask_for_rename():
     should_rename = False

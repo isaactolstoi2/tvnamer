@@ -24,7 +24,7 @@ if typing.TYPE_CHECKING:
         'always_rename': bool,
         'batch': bool,
         'skip_file_on_error': bool,
-        'skip_behaviour': Literal['skip', 'error'],
+        'skip_behaviour': Literal['skip','ask', 'error'],
         'overwrite_destination_on_rename': bool,
         'overwrite_destination_on_move': bool,
         'verbose': bool,
