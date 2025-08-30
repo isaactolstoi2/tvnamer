@@ -266,6 +266,7 @@ class FileParser(object):
                 )
             else:
                 self.compiled_regexs.append(cregex)
+        self.format_regexs = [re.compile(x) for x in Config['format_pattern']]
 
     def parse(self):
         # type: () -> BaseInfo
@@ -398,6 +399,12 @@ class FileParser(object):
                         filename=self.path,
                         extra=extra_values,
                     )
+                if match[match.lastindex] is not None:
+                    attributes=[]
+                    for ex in self.format_regexs:
+                        result = ex.findall(match[match.lastindex].lower())
+                        attributes += result
+                    episode.extra['format']=attributes
 
                 return episode
         else:

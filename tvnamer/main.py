@@ -19,7 +19,7 @@ import tvdb_api
 from typing import List, Union, Optional
 
 from tvnamer import cliarg_parser, __version__
-from tvnamer import kvstore
+from tvnamer import database
 from tvnamer.config_defaults import defaults
 from tvnamer.config import Config
 from tvnamer.files import FileFinder, FileParser, Renamer, _apply_replacements_input
@@ -169,13 +169,14 @@ def lookup_previous_choice(should_lookup: bool,fullfilename :str):
     """
     if not should_lookup:
         return None
-    result = kvstore.lookup(fullfilename)
+    result = database.lookup(fullfilename)
     LOG.debug(f"kvstore lookup {fullfilename}: {result}")
     return result
 
-def store_new_choice(fullfilename,seriesid):
+def store_new_choice(fullfilename,seriesid, episode:EpisodeInfo):
     LOG.debug(f"kvstore store {fullfilename}: {seriesid}")
-    kvstore.store(fullfilename,seriesid)
+    season = str(episode.seasonnumber) if not type(NoSeasonEpisodeInfo) else "00"
+    database.upsert(fullfilename,seriesid, season," ".join([str(i) for i in episode.episodenumbers]),None)
 
 def ask_for_seriesname(episode):
     print(f"Current file: {episode.fullpath}")
@@ -189,7 +190,7 @@ def process_file(tvdb_instance, episode):
     episode = get_episode_name_maybe_prompt(tvdb_instance, episode)
     if episode is None:
         return
-    generate_filename_an_rename(episode)
+    generate_filename_and_rename(episode)
 
 def get_episode_name_maybe_prompt(tvdb_instance, episode):
     retries = 1
@@ -243,13 +244,13 @@ def get_episode_name_maybe_prompt(tvdb_instance, episode):
             warn("%s" % (errormsg))
         retries-=1
     if 'seriesid' in episode.__dict__:
-        store_new_choice(episode.fullfilename,episode.seriesid or None)
+        store_new_choice(episode.fullfilename,episode.seriesid or None, episode)
     return episode
 
-def generate_filename_an_rename(episode):
+def generate_filename_and_rename(episode):
     cnamer = Renamer(episode.fullpath)
 
-    should_rename = False
+    should_rename = Config['always_rename']
 
     new_name = episode.generate_filename()
     if new_name == episode.fullfilename:
@@ -269,7 +270,14 @@ def generate_filename_an_rename(episode):
                 "Before custom output replacements: %s"
                 % (episode.generate_filename(preview_orig_filename=True))
             )
-
+        # check collisions
+        collision = database.find_by_newname(new_name)
+        if collision is not None and collision[0].fullfilename != episode.fullfilename:
+            # if we did not see this source yet, but the destination is in the database we have another version of the same episode, append something
+            # if we saw this file already, as such nothing to do but the destination could have been deleted, which is checked in do_file_operation so let it continue
+            variant = "-".join(episode.extra['format'])
+            new_name = f"{new_name} - {variant}"
+        database.upsert(episode.fullfilename,newfilename=new_name)
         print("New filename: %s" % new_name)
 
         if Config["dry_run"]:
@@ -278,8 +286,8 @@ def generate_filename_an_rename(episode):
         if Config['always_rename'] == False:
             should_rename = ask_for_rename()
 
-        if should_rename:
-            do_file_operation(cnamer,Config["mode"], new_name)
+    if should_rename:
+        do_file_operation(cnamer,Config["mode"], dest_dir=None,dest_filepath=new_name)
 
 
 def ask_for_rename():
