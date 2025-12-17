@@ -357,8 +357,8 @@ def find_files(paths):
     return valid_files
 
 
-def tvnamer(paths):
-    # type: (List[str]) -> None
+def tvnamer(paths, show_progress):
+    # type: (List[str], bool) -> None
     """Main tvnamer function, takes an array of paths, does stuff.
     """
 
@@ -424,8 +424,16 @@ def tvnamer(paths):
         apikey=api_key,
     )
 
-    for episode in episodes_found:
+    progress=0
+    progress_printed=-0.1 #initialized to negative value. emits progress once at start
+    progress_total= len(episodes_found)
+    for i, episode in enumerate(episodes_found):
         process_file(tvdb_instance, episode)
+        if show_progress:
+            progress = i/progress_total
+            if (progress - progress_printed) > 0.05:
+                progress_printed=progress
+                print(f"progress: {progress*100:.0f}%")
         LOG.info("")
 
     LOG.info("#" * 20)
@@ -447,6 +455,11 @@ def main():
         sys.exit(0)
 
     if opts.verbose:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(message)s",
+        )
+    elif opts.debug:
         logging.basicConfig(
             level=logging.DEBUG,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -527,7 +540,7 @@ def main():
         opter.error("No filenames or directories supplied")
 
     try:
-        tvnamer(paths=sorted(args))
+        tvnamer(paths=sorted(args), show_progress=opts.progress or False)
     except NoValidFilesFoundError:
         opter.error("No valid files were supplied")
     except UserAbort as errormsg:

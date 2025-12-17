@@ -41,8 +41,11 @@ def get_cli_parser(defaults):
 
     # Console output
     with Group(parser, "Console output") as g:
-        g.add_option("-v", "--verbose", action="store_true", dest="verbose", help="show debugging info")
+        g.add_option("-v", "--verbose", action="store_true", dest="verbose", help="show verbose info")
         g.add_option("-q", "--not-verbose", action="store_false", dest="verbose", help="no verbose output (useful to override 'verbose':true in config file)")
+        g.add_option( "--debug", action="store_true", dest="debug", help="show debugging info")
+        g.add_option( "--progress", action="store_true", dest="progress", help="show progress")
+
         g.add_option("--dry-run", action="store_true", dest="dry_run", help="Only tell what script is going to do")
 
     # Batch options
