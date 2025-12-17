@@ -105,13 +105,13 @@ def format_episode_name(names, join_with, multiep_format):
     if all_numbers.count(None) > 1:
         # If more than one episode missed a number, simple join
         # E.g ["Blah", "Blah (2)"] is fine, but not ["Blah", "Blah", "Blah (3)"]
-        print("too much none")
+        LOG.debug("too much none")
         return join_with.join(names)
 
     if len(set(all_names)) != 1:
         # If for differing episodes names, simple join
         # E.g "Yep (1)" "Strange (2)" shouldn't be joined into "Yep (1-2)"
-        print("non unqiue names")
+        LOG.debug("non unqiue names")
         return join_with.join(names)
 
     # First missing number becomes 1
@@ -119,13 +119,13 @@ def format_episode_name(names, join_with, multiep_format):
 
     if len(set(noneless_numbers)) != len(noneless_numbers):
         # Duplicate numbers - strange so perform simple join
-        print("Dup numbers")
+        LOG.debug("Dup numbers")
         return join_with.join(names)
 
     if (max(noneless_numbers) - min(noneless_numbers)) != len(noneless_numbers) -  1:
         # If missing numbers in sequence, simple join
         # E.g ["Blah (1)", "Blah (4)"] should not become "Blah (1-4)"
-        print("Non consec")
+        LOG.debug("Non consec")
         return join_with.join(names)
 
 

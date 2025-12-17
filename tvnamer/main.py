@@ -24,7 +24,6 @@ from tvnamer.config_defaults import defaults
 from tvnamer.config import Config
 from tvnamer.files import FileFinder, FileParser, Renamer, _apply_replacements_input
 from tvnamer.utils import (
-    warn,
     format_episode_numbers,
     make_valid_filename,
 )
@@ -125,12 +124,17 @@ def do_file_operation(cnamer,mode, dest_dir=None, dest_filepath=None, get_path_p
             get_path_preview=get_path_preview,
             force=Config["overwrite_destination_on_move"],
         )
-
+    except FileExistsError as e:
+        if Config["skip_behaviour"] == "exit":
+            LOG.info("Exiting due to error: %s" % e)
+            raise SkipBehaviourAbort()
+        LOG.debug("Skipping file due to error: %s" % e)
+        return None
     except OSError as e:
         if Config["skip_behaviour"] == "exit":
-            warn("Exiting due to error: %s" % e)
+            LOG.warning("Exiting due to error: %s" % e)
             raise SkipBehaviourAbort()
-        warn("Skipping file due to error: %s" % e)
+        LOG.warning("Skipping file due to error: %s" % e)
         return None
 
 
@@ -202,7 +206,7 @@ def get_episode_name_maybe_prompt(tvdb_instance, episode):
 
         if len(Config["input_filename_replacements"]) > 0:
             replaced = _apply_replacements_input(episode.fullfilename)
-            print("# With custom replacements: %s" % (replaced))
+            LOG.debug("# With custom replacements: %s" % (replaced))
 
         # Use force_name option. Done after input_filename_replacements so
         # it can be used to skip the replacements easily
@@ -221,42 +225,42 @@ def get_episode_name_maybe_prompt(tvdb_instance, episode):
             retries=0
         except (ShowNotFound) as errormsg:
                 if Config["skip_behaviour"] == "exit":
-                    warn("Exiting due to error: %s" % errormsg)
+                    LOG.warning("Exiting due to error: %s" % errormsg)
                     raise SkipBehaviourAbort()
                 if Config["skip_behaviour"] == "ask":
-                    print(errormsg)
+                    LOG.info(errormsg)
                     force_name = ask_for_seriesname(episode)
                     if len(force_name)>1:
                         retries+=1
                 else:
-                    warn("Skipping file due to error: %s" % errormsg)
+                    LOG.warning("Skipping file due to error: %s" % errormsg)
                     return
 
         except (DataRetrievalError) as errormsg:
             if Config["always_rename"] and Config["skip_file_on_error"] is True:
                 if Config["skip_behaviour"] == "exit":
-                    warn("Exiting due to error: %s" % errormsg)
+                    LOG.warning("Exiting due to error: %s" % errormsg)
                     raise SkipBehaviourAbort()
                 if Config["skip_behaviour"] == "ask":
-                    print(errormsg)
+                    LOG.info(errormsg)
                     force_name = ask_for_seriesname(episode)
                     if len(force_name)>1:
                         retries+=1
                 else:
-                    warn("Skipping file due to error: %s" % errormsg)
+                    LOG.warning("Skipping file due to error: %s" % errormsg)
                     return
             else:
-                warn("%s" % (errormsg))
+                LOG.warning("%s" % (errormsg))
         except (SeasonNotFound, EpisodeNotFound, EpisodeNameNotFound) as errormsg:
             # Show was found, so use corrected series name
             if Config["always_rename"] and Config["skip_file_on_error"]:
                 if Config["skip_behaviour"] == "exit":
-                    warn("Exiting due to error: %s" % errormsg)
+                    LOG.warning("Exiting due to error: %s" % errormsg)
                     raise SkipBehaviourAbort()
-                warn("Skipping file due to error: %s" % errormsg)
+                LOG.warning("Skipping file due to error: %s" % errormsg)
                 return
 
-            warn("%s" % (errormsg))
+            LOG.warning("%s" % (errormsg))
         retries-=1
     if 'seriesid' in episode.__dict__:
         store_new_choice(episode.fullfilename,episode.seriesid or None, episode)
@@ -269,19 +273,19 @@ def generate_filename_and_rename(episode):
 
     new_name = episode.generate_filename()
     if new_name == episode.fullfilename:
-        print("#" * 20)
-        print("Existing filename is correct: %s" % episode.fullfilename)
-        print("#" * 20)
+        LOG.info("#" * 20)
+        LOG.info("Existing filename is correct: %s" % episode.fullfilename)
+        LOG.info("#" * 20)
 
         should_rename = True
 
     else:
-        print("#" * 20)
-        print("Old filename: %s" % episode.fullfilename)
+        LOG.info("#" * 20)
+        LOG.info("Old filename: %s" % episode.fullfilename)
 
         if len(Config["output_filename_replacements"]) > 0:
             # Show filename without replacements
-            print(
+            LOG.info(
                 "Before custom output replacements: %s"
                 % (episode.generate_filename(preview_orig_filename=True))
             )
@@ -292,10 +296,10 @@ def generate_filename_and_rename(episode):
             # if we saw this file already, as such nothing to do but the destination could have been deleted, which is checked in do_file_operation so let it continue
             new_name = episode.generate_filename(add_variant=True)
         database.upsert(episode.fullfilename,newfilename=new_name)
-        print("New filename: %s" % new_name)
+        LOG.debug("New filename: %s" % new_name)
 
         if Config["dry_run"]:
-            print("%s will be %s'ed to %s" % (episode.fullfilename, Config["mode"],new_name))
+            LOG.debug("%s will be %s'ed to %s" % (episode.fullfilename, Config["mode"],new_name))
             return
         if Config['always_rename'] == False:
             should_rename = ask_for_rename()
@@ -309,19 +313,19 @@ def ask_for_rename():
     ans = confirm("Rename?", options=["y", "n", "a", "q"], default="y")
 
     if ans == "a":
-        print("Always renaming")
+        LOG.info("Always renaming")
         Config["always_rename"] = True
         should_rename = True
     elif ans == "q":
-        print("Quitting")
+        LOG.info("Quitting")
         raise UserAbort("User exited with q")
     elif ans == "y":
-        print("Renaming")
+        LOG.info("Renaming")
         should_rename = True
     elif ans == "n":
-        print("Skipping")
+        LOG.info("Skipping")
     else:
-        print("Invalid input, skipping")
+        LOG.info("Invalid input, skipping")
     return should_rename
 
 
@@ -342,7 +346,7 @@ def find_files(paths):
         try:
             valid_files.extend(cur.find_files())
         except InvalidPath:
-            warn("Invalid path: %s" % cfile)
+            LOG.warning("Invalid path: %s" % cfile)
 
     if len(valid_files) == 0:
         raise NoValidFilesFoundError()
@@ -358,8 +362,8 @@ def tvnamer(paths):
     """Main tvnamer function, takes an array of paths, does stuff.
     """
 
-    print("#" * 20)
-    print("# Starting tvnamer")
+    LOG.info("#" * 20)
+    LOG.info("# Starting tvnamer")
 
     episodes_found = []
 
@@ -368,14 +372,14 @@ def tvnamer(paths):
         try:
             episode = parser.parse()
         except InvalidFilename as e:
-            warn("Invalid filename: %s" % e)
+            LOG.warning("Invalid filename: %s" % e)
         else:
             if (
                 episode.seriesname is None
                 and Config["force_name"] is None
                 and Config["series_id"] is None
             ):
-                warn(
+                LOG.warning(
                     "Parsed filename did not contain series name (and --name or --series-id not specified), skipping: %s"
                     % cfile
                 )
@@ -386,7 +390,7 @@ def tvnamer(paths):
     if len(episodes_found) == 0:
         raise NoValidFilesFoundError()
 
-    print(
+    LOG.info(
         "# Found %d episode" % len(episodes_found) + ("s" * (len(episodes_found) > 1))
     )
 
@@ -422,10 +426,10 @@ def tvnamer(paths):
 
     for episode in episodes_found:
         process_file(tvdb_instance, episode)
-        print("")
+        LOG.info("")
 
-    print("#" * 20)
-    print("# Done")
+    LOG.info("#" * 20)
+    LOG.info("# Done")
 
 
 def main():
@@ -515,7 +519,7 @@ def main():
     Config.update(opts.__dict__)
 
     if Config["titlecase_filename"] and Config["lowercase_filename"]:
-        warnings.warn(
+        LOG.warning(
             "Setting 'lowercase_filename' clobbers 'titlecase_filename' option"
         )
 

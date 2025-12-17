@@ -7,7 +7,7 @@ import datetime
 from typing import List, Pattern, Optional
 
 from .config import Config
-from .utils import _apply_replacements, warn, split_extension
+from .utils import _apply_replacements, split_extension
 from .data import BaseInfo, EpisodeInfo, DatedEpisodeInfo, AnimeEpisodeInfo, NoSeasonEpisodeInfo
 from .tvnamer_exceptions import ConfigValueError, InvalidFilename, InvalidPath
 
@@ -260,7 +260,7 @@ class FileParser(object):
             try:
                 cregex = re.compile(cpattern, re.VERBOSE)
             except re.error as errormsg:
-                warn(
+                LOG.warning(
                     "WARNING: Invalid episode_pattern (error: %s)\nPattern:\n%s"
                     % (errormsg, cpattern)
                 )
@@ -297,7 +297,7 @@ class FileParser(object):
                     start = int(match.group('episodenumberstart'))
                     end = int(match.group('episodenumberend'))
                     if end - start > 5:
-                        warn(
+                        LOG.warning(
                             "WARNING: %s episodes detected in file: %s, confused by numeric episode name, using first match: %s"
                             % (end - start, filename, start)
                         )
@@ -416,14 +416,14 @@ class FileParser(object):
 
 def rename_file(old, new):
     # type: (str, str) -> None
-    print("rename %s to %s" % (old, new))
+    LOG.info("rename %s to %s" % (old, new))
     stat = os.stat(old)
     shutil.move(old, new)
     try:
         os.utime(new, (stat.st_atime, stat.st_mtime))
     except OSError as ex:
         if ex.errno == errno.EPERM:
-            warn(
+            LOG.warning(
                 "WARNING: Could not preserve times for %s "
                 "(owner UID mismatch?)" % new
             )
@@ -433,14 +433,14 @@ def rename_file(old, new):
 
 def copy_file(old, new):
     # type: (str, str) -> None
-    print("copy %s to %s" % (old, new))
+    LOG.info("copy %s to %s" % (old, new))
     shutil.copyfile(old, new)
     shutil.copystat(old, new)
 
 
 def symlink_file(target, name):
     # type: (str, str) -> None
-    print("symlink %s to %s" % (name, target))
+    LOG.info("symlink %s to %s" % (name, target))
     os.symlink(target, name)
 
 
@@ -489,23 +489,23 @@ class Renamer(object):
             new_dir = os.path.dirname(new_fullpath)
 
         if len(Config['move_files_fullpath_replacements']) > 0:
-            print("Before custom full path replacements: %s" % (new_fullpath))
+            LOG.debug("Before custom full path replacements: %s" % (new_fullpath))
             new_fullpath = _apply_replacements_fullpath(new_fullpath)
             new_dir = os.path.dirname(new_fullpath)
 
-        print("New path: %s" % new_fullpath)
+        LOG.debug("New path: %s" % new_fullpath)
 
         if get_path_preview:
             return new_fullpath
 
         if not os.path.exists(new_dir):
             os.makedirs(new_dir, exist_ok=True)
-            print("Created directory %s" % new_dir)
+            LOG.debug("Created directory %s" % new_dir)
 
         if os.path.isfile(new_fullpath):
             # If the destination exists, raise exception unless force is True
             if not force:
-                raise OSError(
+                raise FileExistsError(
                     "File %s already exists, no change. add --force to overwrite %s"
                     % (new_fullpath, self.filename)
                 )

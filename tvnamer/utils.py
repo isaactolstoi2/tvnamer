@@ -33,14 +33,6 @@ from typing import Any, Dict, List, Optional, Union, Tuple, Pattern
 
 LOG = logging.getLogger(__name__)
 
-
-def warn(text):
-    # type: (str) -> None
-    """Displays message to sys.stderr
-    """
-    print(text, file=sys.stderr)
-
-
 def split_extension(filename):
     # type: (str) -> Tuple[str, str]
     base = re.sub(Config["extension_pattern"], "", filename)
