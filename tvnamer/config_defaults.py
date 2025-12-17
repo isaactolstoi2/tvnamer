@@ -86,7 +86,7 @@ defaults = {
     'remember_choice':True,
 
     # path to kvstore, a sqlite db which stores the choices
-    'kvstore':'kvstore.sqlite',
+    'kvstore':'~/.config/tvnamer/kvstore.sqlite',
 
     # Select first series search result
     'select_first': False,

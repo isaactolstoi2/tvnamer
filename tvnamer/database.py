@@ -2,16 +2,27 @@
 
 
 from dataclasses import dataclass
+from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import MetaData, Table, create_engine, delete
 from sqlalchemy.dialects.sqlite import Insert as insert
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
-from tvnamer.config import Config
-from sqlalchemy.orm import MappedAsDataclass
-engine = create_engine(f"sqlite:///{Config['kvstore']}", echo=Config['verbose'])
 
+from sqlalchemy.orm import MappedAsDataclass
+
+engine=None
+session=None
+metadata=None
+
+def init_database(config):
+    global engine, session, metadata
+    Path(config['kvstore']).parent.mkdir(parents=True,exist_ok=True)
+    engine = create_engine(f"sqlite:///{config['kvstore']}", echo=config['verbose'])
+    session = Session(engine)
+    metadata = MetaData()
+    Base.metadata.create_all(engine)
 
 # declarative base class
 class Base(DeclarativeBase):
@@ -32,9 +43,7 @@ class KVStore(MappedAsDataclass,Base):
         temp={el.name:getattr(self,el.name) for el in self.__table__.columns}
         return {k: v for k, v in  temp.items() if v is not None}
 
-session = Session(engine)
-metadata = MetaData()
-Base.metadata.create_all(engine)
+
 from sqlalchemy import select
 
 def lookup(fullfilename:str)->str|None:

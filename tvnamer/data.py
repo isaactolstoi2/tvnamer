@@ -214,6 +214,8 @@ class BaseInfo(metaclass=ABCMeta):
         # FIXME: MOve this into each subclass - too much hasattr/isinstance
         try:
             if series_id is None:
+                print(f"not in cache: series:{self.seriesname}, loc:{self.fullpath}")
+                LOG.info(f"not in cache: series:{self.seriesname}, loc:{self.fullpath}")
                 show = tvdb_instance[force_name or self.seriesname]
             else:
                 series_id = int(series_id)

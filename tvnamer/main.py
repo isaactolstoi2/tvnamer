@@ -4,6 +4,7 @@
 """
 
 import os
+from pathlib import Path
 import sys
 import logging
 import warnings
@@ -19,7 +20,6 @@ import tvdb_api
 from typing import List, Union, Optional
 
 from tvnamer import cliarg_parser, __version__
-from tvnamer import database
 from tvnamer.config_defaults import defaults
 from tvnamer.config import Config
 from tvnamer.files import FileFinder, FileParser, Renamer, _apply_replacements_input
@@ -46,6 +46,7 @@ from tvnamer.tvnamer_exceptions import (
     InvalidFilename,
     DataRetrievalError,
 )
+from tvnamer import database
 
 
 LOG = logging.getLogger(__name__)
@@ -414,7 +415,10 @@ def tvnamer(paths, show_progress):
         from .test_cache import get_test_cache_session
         cache = get_test_cache_session()
     else:
-        cache = True
+        if Config['kvstore']:
+            cache = str(Path(Config['kvstore']).parent)
+        else:
+            cache = True
 
     tvdb_instance = tvdb_api.Tvdb(
         interactive=not Config["select_first"],
@@ -540,6 +544,7 @@ def main():
         opter.error("No filenames or directories supplied")
 
     try:
+        database.init_database(Config)
         tvnamer(paths=sorted(args), show_progress=opts.progress or False)
     except NoValidFilesFoundError:
         opter.error("No valid files were supplied")
