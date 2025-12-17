@@ -138,6 +138,7 @@ def make_valid_filename(
 
     # Append custom blacklisted characters
     if custom_blacklist is not None:
+        blacklist = "" if blacklist is None else blacklist #fix type warning
         blacklist += custom_blacklist
 
     if blacklist is not None:

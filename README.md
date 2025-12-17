@@ -86,7 +86,7 @@ If there are multiple shows with the same (or similar) names or languages, you w
     4 -> Lost [fi] # http://thetvdb.com/?tab=series&id=73739&lid=11
     5 -> Lost [nl] # http://thetvdb.com/?tab=series&id=73739&lid=13
     6 -> Lost [de] # http://thetvdb.com/?tab=series&id=73739&lid=14
-    Enter choice (first number, ? for help):    
+    Enter choice (first number, ? for help):
 
 To select the first result, enter `1` then `return`, to select the second enter `2` and so on. The link after `#` goes to the relevant [thetvdb.com][tvdb] page, which will contain information and images to help you select the correct series.
 
@@ -183,7 +183,7 @@ This may seem like a lot, but they are mostly the same thing. They all have sens
 
 Say you want the format `Show Name 01x24 Episode Name.avi`, your `filename_with_episode` option would be:
 
-    %(seriesname)s %(seasonno)02dx%(episode)s %(episodename)s%(ext)s
+    %(seriesname)s %(seasonno)02dx%(episode)s %(episodename)s%(variant)s%(ext)s
 
 The formatting language used is Python's string formatting feature, which you can read about in the Python documentation, [6.6.2. String Formatting Operations](http://docs.python.org/library/stdtypes.html#string-formatting). Basically it's just `%()s` and the name element you wish to use between `( )`
 
@@ -193,15 +193,15 @@ Then you need to make a few variants, one without the `episodename` section, and
 
 `filename_with_episode_no_season`:
 
-    %(seriesname)s %(seasonno)02dx%(episode)s %(episodename)s%(ext)s
+    %(seriesname)s %(seasonno)02dx%(episode)s %(episodename)s%(variant)s%(ext)s
 
 `filename_without_episode`:
 
-    %(seriesname)s %(seasonno)02dx%(episode)s%(ext)s
+    %(seriesname)s %(seasonno)02dx%(episode)s%(variant)s%(ext)s
 
 `filename_without_episode_no_season`:
 
-    %(seriesname)s %(episode)s%(ext)s
+    %(seriesname)s %(episode)s%(variant)s%(ext)s
 
 There are yet two more options you may want to change, `episode_single` and `episode_separator`
 

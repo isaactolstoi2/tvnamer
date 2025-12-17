@@ -175,7 +175,7 @@ def lookup_previous_choice(should_lookup: bool,fullfilename :str):
 
 def store_new_choice(fullfilename,seriesid, episode:EpisodeInfo):
     LOG.debug(f"kvstore store {fullfilename}: {seriesid}")
-    season = str(episode.seasonnumber) if not type(NoSeasonEpisodeInfo) else "00"
+    season = str(episode.seasonnumber) if type(episode) != NoSeasonEpisodeInfo else "00"
     database.upsert(fullfilename,seriesid, season," ".join([str(i) for i in episode.episodenumbers]),None)
 
 def ask_for_seriesname(episode):
@@ -197,8 +197,8 @@ def get_episode_name_maybe_prompt(tvdb_instance, episode):
     force_name = None
     while (retries >0):
 
-        print("#" * 20)
-        print("# Processing file: %s" % episode.fullfilename)
+        LOG.info("#" * 20)
+        LOG.info("# Processing file: %s" % episode.fullfilename)
 
         if len(Config["input_filename_replacements"]) > 0:
             replaced = _apply_replacements_input(episode.fullfilename)
@@ -209,7 +209,7 @@ def get_episode_name_maybe_prompt(tvdb_instance, episode):
         if Config["force_name"] is not None:
             episode.seriesname = Config["force_name"]
 
-        print("# Detected series: %s (%s)" % (episode.seriesname, episode.number_string()))
+        LOG.info("# Detected series: %s (%s)" % (episode.seriesname, episode.number_string()))
         series_id = Config["series_id"] or lookup_previous_choice(Config['remember_choice'],episode.fullfilename)
         try:
             episode.populate_from_tvdb(
@@ -217,7 +217,22 @@ def get_episode_name_maybe_prompt(tvdb_instance, episode):
                 force_name=Config["force_name"] or force_name,
                 series_id=series_id,
             )
-        except (DataRetrievalError, ShowNotFound) as errormsg:
+            # no error at first try.
+            retries=0
+        except (ShowNotFound) as errormsg:
+                if Config["skip_behaviour"] == "exit":
+                    warn("Exiting due to error: %s" % errormsg)
+                    raise SkipBehaviourAbort()
+                if Config["skip_behaviour"] == "ask":
+                    print(errormsg)
+                    force_name = ask_for_seriesname(episode)
+                    if len(force_name)>1:
+                        retries+=1
+                else:
+                    warn("Skipping file due to error: %s" % errormsg)
+                    return
+
+        except (DataRetrievalError) as errormsg:
             if Config["always_rename"] and Config["skip_file_on_error"] is True:
                 if Config["skip_behaviour"] == "exit":
                     warn("Exiting due to error: %s" % errormsg)
@@ -275,8 +290,7 @@ def generate_filename_and_rename(episode):
         if collision is not None and collision[0].fullfilename != episode.fullfilename:
             # if we did not see this source yet, but the destination is in the database we have another version of the same episode, append something
             # if we saw this file already, as such nothing to do but the destination could have been deleted, which is checked in do_file_operation so let it continue
-            variant = "-".join(episode.extra['format'])
-            new_name = f"{new_name} - {variant}"
+            new_name = episode.generate_filename(add_variant=True)
         database.upsert(episode.fullfilename,newfilename=new_name)
         print("New filename: %s" % new_name)
 
@@ -513,9 +527,9 @@ def main():
     except NoValidFilesFoundError:
         opter.error("No valid files were supplied")
     except UserAbort as errormsg:
-        opter.error(errormsg)
+        opter.error(str(errormsg))
     except SkipBehaviourAbort as errormsg:
-        opter.error(errormsg)
+        opter.error(str(errormsg))
 
 
 if __name__ == "__main__":

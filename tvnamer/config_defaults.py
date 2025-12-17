@@ -7,9 +7,8 @@ import typing
 if typing.TYPE_CHECKING:
     from typing import Dict, Any, List, Optional, Union
     from typing import Literal # Note: Python 3.8+ only, but mypy can check this in older Python versions
-    from mypy_extensions import TypedDict
 
-    TypedReplacement = TypedDict('TypedReplacement', {
+    TypedReplacement = typing.TypedDict('TypedReplacement', {
         "is_regex": bool,
         "match": str,
         "replacement": str,
@@ -459,38 +458,38 @@ defaults = {
     # Formats for renamed files. Variations for with/without episode,
     # and with/without season number.
     'filename_with_episode':
-        '%(seriesname)s - [%(seasonnumber)02dx%(episode)s] - %(episodename)s%(ext)s',
+        '%(seriesname)s - [%(seasonnumber)02dx%(episode)s] - %(episodename)s%(variant)s%(ext)s',
     'filename_without_episode':
-        '%(seriesname)s - [%(seasonnumber)02dx%(episode)s]%(ext)s',
+        '%(seriesname)s - [%(seasonnumber)02dx%(episode)s]%(variant)s%(ext)s',
 
     # Seasonless filenames.
     'filename_with_episode_no_season':
-        '%(seriesname)s - [%(episode)s] - %(episodename)s%(ext)s',
+        '%(seriesname)s - [%(episode)s] - %(episodename)s%(variant)s%(ext)s',
     'filename_without_episode_no_season':
-        '%(seriesname)s - [%(episode)s]%(ext)s',
+        '%(seriesname)s - [%(episode)s]%(variant)s%(ext)s',
 
     # Date based filenames.
     # Series - [2012-01-24] - Ep name.ext
     'filename_with_date_and_episode':
-        '%(seriesname)s - [%(episode)s] - %(episodename)s%(ext)s',
+        '%(seriesname)s - [%(episode)s] - %(episodename)s%(variant)s%(ext)s',
     'filename_with_date_without_episode':
-        '%(seriesname)s - [%(episode)s]%(ext)s',
+        '%(seriesname)s - [%(episode)s]%(variant)s%(ext)s',
 
     # Anime filenames.
     # [AGroup] Series - 02 - Some Ep Name [CRC1234].ext
     # [AGroup] Series - 02 [CRC1234].ext
     'filename_anime_with_episode':
-        '[%(group)s] %(seriesname)s - %(episode)s - %(episodename)s [%(crc)s]%(ext)s',
+        '[%(group)s] %(seriesname)s - %(episode)s - %(episodename)s [%(crc)s]%(variant)s%(ext)s',
 
     'filename_anime_without_episode':
-        '[%(group)s] %(seriesname)s - %(episode)s [%(crc)s]%(ext)s',
+        '[%(group)s] %(seriesname)s - %(episode)s [%(crc)s]%(variant)s%(ext)s',
 
     # Same, without CRC value
     'filename_anime_with_episode_without_crc':
-        '[%(group)s] %(seriesname)s - %(episode)s - %(episodename)s%(ext)s',
+        '[%(group)s] %(seriesname)s - %(episode)s - %(episodename)s%(variant)s%(ext)s',
 
     'filename_anime_without_episode_without_crc':
-        '[%(group)s] %(seriesname)s - %(episode)s%(ext)s',
+        '[%(group)s] %(seriesname)s - %(episode)s%(variant)s%(ext)s',
 
 
 

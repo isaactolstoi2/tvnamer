@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import datetime
@@ -24,6 +25,9 @@ from tvnamer.utils import (
     split_extension,
     _apply_replacements, # FIXME
 )
+
+LOG = logging.getLogger(__name__)
+
 
 
 def _replace_output_series_name(seriesname):
@@ -214,6 +218,8 @@ class BaseInfo(metaclass=ABCMeta):
             else:
                 series_id = int(series_id)
                 show = tvdb_instance[series_id]
+                if show is None:
+                    LOG.debug("series_id was given but nothing returend from tvdb")
             if show is None:
                 print("Enter search term or [Enter] to skip:")
                 search_term = input()
@@ -303,12 +309,12 @@ class BaseInfo(metaclass=ABCMeta):
 
         self.episodename = epnames
 
-    def format_name(self, epdata):
-        # type: (Dict[str, Optional[str]]) -> str
+    def format_name(self, epdata, add_variant):
+        # type: (Dict[str, Optional[str]],Optional[bool]) -> str
         raise NotImplemented
 
-    def generate_filename(self, preview_orig_filename=False):
-        # type: (bool) -> str
+    def generate_filename(self, preview_orig_filename=False, add_variant=False):
+        # type: (bool, Optional[bool]) -> str
 
         # FIXME: Move this into each subclass - too much hasattr/isinstance
 
@@ -320,14 +326,14 @@ class BaseInfo(metaclass=ABCMeta):
         epdata.update(original_epdata)
 
         if self.episodename is None:
-            fname = self.format_name(epdata)
+            fname = self.format_name(epdata, add_variant)
         else:
             epdata['episodename'] = format_episode_name(
                 self.episodename,
                 join_with=Config['multiep_join_name_with'],
                 multiep_format=Config['multiep_format'],
             )
-            fname = self.format_name(epdata)
+            fname = self.format_name(epdata, add_variant)
 
         fname = transform_filename(fname)
         if preview_orig_filename:
@@ -343,6 +349,7 @@ class BaseInfo(metaclass=ABCMeta):
             custom_blacklist=Config['custom_filename_character_blacklist'],
             replace_with=Config['replace_invalid_characters_with'],
         )
+
 
 
 class EpisodeInfo(BaseInfo):
@@ -404,13 +411,14 @@ class EpisodeInfo(BaseInfo):
             'seasonnumber': self.seasonnumber,
             'episode': epno,
             'episodename': self.episodename,
+            'variant':"-".join(self.extra['format']),
             'ext': prep_extension,
         }
 
         return epdata
 
-    def format_name(self, epdata):
-        # type: (Dict[str, Optional[str]]) -> str
+    def format_name(self, epdata, add_variant):
+        # type: (Dict[str, Optional[str]],Optional[bool]) -> str
         if self.episodename is not None:
             return Config["filename_with_episode"] % epdata
         else:
@@ -477,13 +485,14 @@ class DatedEpisodeInfo(BaseInfo):
             'seriesname': self.seriesname,
             'episode': dates,
             'episodename': prep_episodename,
+            'variant':"-".join(self.extra['format']),
             'ext': prep_extension,
         }
 
         return epdata
 
-    def format_name(self, epdata,):
-        # type: (Dict[str, Optional[str]]) -> str
+    def format_name(self, epdata, add_variant):
+        # type: (Dict[str, Optional[str]],Optional[bool]) -> str
         if self.episodename is not None:
             return Config["filename_with_date_and_episode"] % epdata
         else:
@@ -535,13 +544,14 @@ class NoSeasonEpisodeInfo(BaseInfo):
             'seriesname': self.seriesname,
             'episode': epno,
             'episodename': self.episodename,
+            'variant':"-".join(self.extra['format']),
             'ext': prep_extension,
         }
 
         return epdata
 
-    def format_name(self, epdata):
-        # type: (Dict[str, Optional[str]]) -> str
+    def format_name(self, epdata, add_variant):
+        # type: (Dict[str, Optional[str]],Optional[bool]) -> str
         if self.episodename is not None:
             return Config["filename_with_episode_no_season"] % epdata
         else:
@@ -555,8 +565,8 @@ class AnimeEpisodeInfo(NoSeasonEpisodeInfo):
     CFG_KEY_WITH_EP_NO_CRC = "filename_anime_with_episode_without_crc"
     CFG_KEY_WITHOUT_EP_NO_CRC = "filename_anime_without_episode_without_crc"
 
-    def format_name(self, epdata):
-        # type: (Dict[str, Optional[str]]) -> str
+    def format_name(self, epdata, add_variant):
+        # type: (Dict[str, Optional[str]],Optional[bool]) -> str
         if self.episodename is None:
             if self.extra.get('crc') is None:
                 fmt = Config["filename_anime_without_episode_without_crc"]
@@ -571,8 +581,8 @@ class AnimeEpisodeInfo(NoSeasonEpisodeInfo):
 
         return fmt % epdata
 
-    def generate_filename(self, preview_orig_filename=False):
-        # type: (bool) -> str
+    def generate_filename(self, preview_orig_filename=False, add_variant=False):
+        # type: (bool,Optional[bool]) -> str
         orig_epdata = self.getepdata()
 
         # Add in extra dict keys, without clobbering existing values in epdata
@@ -588,7 +598,7 @@ class AnimeEpisodeInfo(NoSeasonEpisodeInfo):
                     multiep_format=Config['multiep_format'],
                 )
 
-        fname = self.format_name(epdata)
+        fname = self.format_name(epdata, add_variant)
 
         # Lowercase/titlecase/etc
         fname = transform_filename(fname)
