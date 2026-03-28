@@ -52,12 +52,12 @@ def lookup(fullfilename:str)->str|None:
     return None if (row == None) else row[0].seriesid
 def find_by_newname(newfilename:str):
     stmt = select(KVStore).where(KVStore.newfilename==newfilename)
-    row = session.execute(stmt).one_or_none()
+    row = session.execute(stmt).first()
     return None if (row == None) else row
 
 def upsert(fullfilename:str,seriesid:str|None=None,season:str|None=None,episode:str|None=None,newfilename:str|None=None):
     values={k: v for k, v in  locals().items() if v is not None}
-    existing = session.execute(select(KVStore).where(KVStore.fullfilename==fullfilename)).one_or_none()
+    existing = session.execute(select(KVStore).where(KVStore.fullfilename==fullfilename)).first()
     if existing:
         values.update(existing[0].to_dict())
     stmt = insert(KVStore).values(values)

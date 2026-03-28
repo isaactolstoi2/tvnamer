@@ -4,9 +4,7 @@ dynamic = ["version"]
 description = "Automatic TV episode namer"
 readme = "README.md"
 license = "unlicense"
-authors = [
-    { name = "dbr/Ben" },
-]
+authors = [{ name = "dbr/Ben" }]
 classifiers = [
     "Environment :: Console",
     "Intended Audience :: End Users/Desktop",
@@ -29,4 +27,5 @@ tvnamer = "tvnamer.main:main"
 Homepage = "http://github.com/dbr/tvnamer"
 
 
-
+[tool.black]
+line-length = 120

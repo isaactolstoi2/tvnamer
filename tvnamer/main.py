@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
-"""Main tvnamer utility functionality
-"""
+"""Main tvnamer utility functionality"""
 
 import os
 from pathlib import Path
@@ -58,8 +57,7 @@ TVNAMER_API_KEY = "fb51f9b848ffac9750bada89ecba0225"
 
 def get_move_destination(episode):
     # type: (BaseInfo) -> str
-    """Constructs the location to move/copy the file
-    """
+    """Constructs the location to move/copy the file"""
 
     # TODO: Write functional test to ensure this valid'ifying works
     def wrap_validfname(fname):
@@ -88,18 +86,14 @@ def get_move_destination(episode):
     elif isinstance(episode, NoSeasonEpisodeInfo):
         dest_dir = Config["move_files_destination"] % {
             "seriesname": wrap_validfname(episode.seriesname),
-            "episodenumbers": wrap_validfname(
-                format_episode_numbers(episode.episodenumbers)
-            ),
+            "episodenumbers": wrap_validfname(format_episode_numbers(episode.episodenumbers)),
             "originalfilename": episode.originalfilename,
         }
     elif isinstance(episode, EpisodeInfo):
         dest_dir = Config["move_files_destination"] % {
             "seriesname": wrap_validfname(episode.seriesname),
             "seasonnumber": episode.seasonnumber,
-            "episodenumbers": wrap_validfname(
-                format_episode_numbers(episode.episodenumbers)
-            ),
+            "episodenumbers": wrap_validfname(format_episode_numbers(episode.episodenumbers)),
             "originalfilename": episode.originalfilename,
         }
     else:
@@ -108,10 +102,9 @@ def get_move_destination(episode):
     return dest_dir
 
 
-def do_file_operation(cnamer,mode, dest_dir=None, dest_filepath=None, get_path_preview=False):
+def do_file_operation(cnamer, mode, dest_dir=None, dest_filepath=None, get_path_preview=False):
     # type: (Renamer,str, Optional[str], Optional[str], bool) -> Optional[str]
-    """Moves, rename, copy, or symlink file to dest_dir, or to dest_filepath
-    """
+    """Moves, rename, copy, or symlink file to dest_dir, or to dest_filepath"""
 
     if (dest_dir, dest_filepath).count(None) != 1:
         raise ValueError("Specify only dest_dir or dest_filepath")
@@ -168,7 +161,8 @@ def confirm(question, options, default="y"):
         elif ans == "":
             return default
 
-def lookup_previous_choice(should_lookup: bool,fullfilename :str):
+
+def lookup_previous_choice(should_lookup: bool, fullfilename: str):
     """lookup in database if fullfilname has a entry, to avoid re-asking or the same file
     if should_lookup is false this method is a noop
     """
@@ -178,29 +172,39 @@ def lookup_previous_choice(should_lookup: bool,fullfilename :str):
     LOG.debug(f"kvstore lookup {fullfilename}: {result}")
     return result
 
-def store_new_choice(fullfilename,seriesid, episode:EpisodeInfo):
+
+def store_new_choice(fullfilename, seriesid, episode: EpisodeInfo):
     LOG.debug(f"kvstore store {fullfilename}: {seriesid}")
-    season = str(episode.seasonnumber) if type(episode) != NoSeasonEpisodeInfo else "00"
-    database.upsert(fullfilename,seriesid, season," ".join([str(i) for i in episode.episodenumbers]),None)
+    season = "00" if isinstance(episode, NoSeasonEpisodeInfo) else str(episode.seasonnumber)
+
+    database.upsert(
+        fullfilename,
+        seriesid,
+        season,
+        " ".join([str(i) for i in episode.episodenumbers]),
+        None,
+    )
+
 
 def ask_for_seriesname(episode):
     print(f"Current file: {episode.fullpath}")
     print("Please enter series name:")
     return input().strip()
 
+
 def process_file(tvdb_instance, episode):
     # type: (tvdb_api.Tvdb, BaseInfo) -> None
-    """Gets episode name, prompts user for input
-    """
+    """Gets episode name, prompts user for input"""
     episode = get_episode_name_maybe_prompt(tvdb_instance, episode)
     if episode is None:
         return
     generate_filename_and_rename(episode)
 
+
 def get_episode_name_maybe_prompt(tvdb_instance, episode):
     retries = 1
     force_name = None
-    while (retries >0):
+    while retries > 0:
 
         LOG.info("#" * 20)
         LOG.info("# Processing file: %s" % episode.fullfilename)
@@ -215,7 +219,7 @@ def get_episode_name_maybe_prompt(tvdb_instance, episode):
             episode.seriesname = Config["force_name"]
 
         LOG.info("# Detected series: %s (%s)" % (episode.seriesname, episode.number_string()))
-        series_id = Config["series_id"] or lookup_previous_choice(Config['remember_choice'],episode.fullfilename)
+        series_id = Config["series_id"] or lookup_previous_choice(Config["remember_choice"], episode.fullfilename)
         try:
             episode.populate_from_tvdb(
                 tvdb_instance,
@@ -223,30 +227,37 @@ def get_episode_name_maybe_prompt(tvdb_instance, episode):
                 series_id=series_id,
             )
             # no error at first try.
-            retries=0
-        except (ShowNotFound) as errormsg:
-                if Config["skip_behaviour"] == "exit":
-                    LOG.warning("Exiting due to error: %s" % errormsg)
-                    raise SkipBehaviourAbort()
-                if Config["skip_behaviour"] == "ask":
-                    LOG.info(errormsg)
-                    force_name = ask_for_seriesname(episode)
-                    if len(force_name)>1:
-                        retries+=1
+            retries = 0
+        except ShowNotFound as errormsg:
+            if Config["skip_behaviour"] == "exit":
+                LOG.warning("Exiting due to error: %s" % errormsg)
+                raise SkipBehaviourAbort()
+            if Config["skip_behaviour"] == "ask":
+                LOG.info(errormsg)
+                force_name = ask_for_seriesname(episode)
+                if len(force_name) > 1:
+                    retries += 1
                 else:
-                    LOG.warning("Skipping file due to error: %s" % errormsg)
-                    return
+                    print("series id:")
+                    series_id = input().strip()
+                    if len(series_id) > 1:
+                        Config["series_id"] = series_id
+                        retries += 1
+            else:
+                LOG.warning("Skipping file due to error: %s" % errormsg)
+                return
 
-        except (DataRetrievalError) as errormsg:
+        except DataRetrievalError as errormsg:
             if Config["always_rename"] and Config["skip_file_on_error"] is True:
                 if Config["skip_behaviour"] == "exit":
                     LOG.warning("Exiting due to error: %s" % errormsg)
                     raise SkipBehaviourAbort()
                 if Config["skip_behaviour"] == "ask":
                     LOG.info(errormsg)
+                    print(f"ask2{errormsg}")
                     force_name = ask_for_seriesname(episode)
-                    if len(force_name)>1:
-                        retries+=1
+                    if len(force_name) > 1:
+                        retries += 1
                 else:
                     LOG.warning("Skipping file due to error: %s" % errormsg)
                     return
@@ -262,15 +273,16 @@ def get_episode_name_maybe_prompt(tvdb_instance, episode):
                 return
 
             LOG.warning("%s" % (errormsg))
-        retries-=1
-    if 'seriesid' in episode.__dict__:
-        store_new_choice(episode.fullfilename,episode.seriesid or None, episode)
+        retries -= 1
+    if "seriesid" in episode.__dict__:
+        store_new_choice(episode.fullfilename, episode.seriesid or None, episode)
     return episode
+
 
 def generate_filename_and_rename(episode):
     cnamer = Renamer(episode.fullpath)
 
-    should_rename = Config['always_rename']
+    should_rename = Config["always_rename"]
 
     new_name = episode.generate_filename()
     if new_name == episode.fullfilename:
@@ -286,27 +298,24 @@ def generate_filename_and_rename(episode):
 
         if len(Config["output_filename_replacements"]) > 0:
             # Show filename without replacements
-            LOG.info(
-                "Before custom output replacements: %s"
-                % (episode.generate_filename(preview_orig_filename=True))
-            )
+            LOG.info("Before custom output replacements: %s" % (episode.generate_filename(preview_orig_filename=True)))
         # check collisions
         collision = database.find_by_newname(new_name)
         if collision is not None and collision[0].fullfilename != episode.fullfilename:
             # if we did not see this source yet, but the destination is in the database we have another version of the same episode, append something
             # if we saw this file already, as such nothing to do but the destination could have been deleted, which is checked in do_file_operation so let it continue
             new_name = episode.generate_filename(add_variant=True)
-        database.upsert(episode.fullfilename,newfilename=new_name)
+        database.upsert(episode.fullfilename, newfilename=new_name)
         LOG.debug("New filename: %s" % new_name)
 
         if Config["dry_run"]:
-            LOG.debug("%s will be %s'ed to %s" % (episode.fullfilename, Config["mode"],new_name))
+            LOG.debug("%s will be %s'ed to %s" % (episode.fullfilename, Config["mode"], new_name))
             return
-        if Config['always_rename'] == False:
+        if Config["always_rename"] == False:
             should_rename = ask_for_rename()
 
     if should_rename:
-        do_file_operation(cnamer,Config["mode"], dest_dir=None,dest_filepath=new_name)
+        do_file_operation(cnamer, Config["mode"], dest_dir=None, dest_filepath=new_name)
 
 
 def ask_for_rename():
@@ -332,8 +341,7 @@ def ask_for_rename():
 
 def find_files(paths):
     # type: (List[str]) -> List[str]
-    """Takes an array of paths, returns all files found
-    """
+    """Takes an array of paths, returns all files found"""
     valid_files = []
 
     for cfile in paths:
@@ -360,8 +368,7 @@ def find_files(paths):
 
 def tvnamer(paths, show_progress):
     # type: (List[str], bool) -> None
-    """Main tvnamer function, takes an array of paths, does stuff.
-    """
+    """Main tvnamer function, takes an array of paths, does stuff."""
 
     LOG.info("#" * 20)
     LOG.info("# Starting tvnamer")
@@ -375,11 +382,7 @@ def tvnamer(paths, show_progress):
         except InvalidFilename as e:
             LOG.warning("Invalid filename: %s" % e)
         else:
-            if (
-                episode.seriesname is None
-                and Config["force_name"] is None
-                and Config["series_id"] is None
-            ):
+            if episode.seriesname is None and Config["force_name"] is None and Config["series_id"] is None:
                 LOG.warning(
                     "Parsed filename did not contain series name (and --name or --series-id not specified), skipping: %s"
                     % cfile
@@ -391,9 +394,7 @@ def tvnamer(paths, show_progress):
     if len(episodes_found) == 0:
         raise NoValidFilesFoundError()
 
-    LOG.info(
-        "# Found %d episode" % len(episodes_found) + ("s" * (len(episodes_found) > 1))
-    )
+    LOG.info("# Found %d episode" % len(episodes_found) + ("s" * (len(episodes_found) > 1)))
 
     # Sort episodes by series name, season and episode number
     episodes_found.sort(key=lambda x: x.sortable_info())
@@ -413,10 +414,11 @@ def tvnamer(paths, show_progress):
 
     if os.getenv("TVNAMER_TEST_MODE", "0") == "1":
         from .test_cache import get_test_cache_session
+
         cache = get_test_cache_session()
     else:
-        if Config['kvstore']:
-            cache = str(Path(Config['kvstore']).parent)
+        if Config["kvstore"]:
+            cache = str(Path(Config["kvstore"]).parent)
         else:
             cache = True
 
@@ -428,15 +430,15 @@ def tvnamer(paths, show_progress):
         apikey=api_key,
     )
 
-    progress=0
-    progress_printed=-0.1 #initialized to negative value. emits progress once at start
-    progress_total= len(episodes_found)
+    progress = 0
+    progress_printed = -0.1  # initialized to negative value. emits progress once at start
+    progress_total = len(episodes_found)
     for i, episode in enumerate(episodes_found):
         process_file(tvdb_instance, episode)
         if show_progress:
-            progress = i/progress_total
+            progress = i / progress_total
             if (progress - progress_printed) > 0.05:
-                progress_printed=progress
+                progress_printed = progress
                 print(f"progress: {progress*100:.0f}%")
         LOG.info("")
 
@@ -446,8 +448,7 @@ def tvnamer(paths, show_progress):
 
 def main():
     # type: () -> None
-    """Parses command line arguments, displays errors from tvnamer in terminal
-    """
+    """Parses command line arguments, displays errors from tvnamer in terminal"""
     opter = cliarg_parser.get_cli_parser(defaults)
 
     opts, args = opter.parse_args()
@@ -536,9 +537,7 @@ def main():
     Config.update(opts.__dict__)
 
     if Config["titlecase_filename"] and Config["lowercase_filename"]:
-        LOG.warning(
-            "Setting 'lowercase_filename' clobbers 'titlecase_filename' option"
-        )
+        LOG.warning("Setting 'lowercase_filename' clobbers 'titlecase_filename' option")
 
     if len(args) == 0:
         opter.error("No filenames or directories supplied")
