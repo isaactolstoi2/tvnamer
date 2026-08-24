@@ -188,8 +188,7 @@ def store_new_choice(fullfilename, seriesid, episode: EpisodeInfo):
 
 def ask_for_seriesname(episode):
     print(f"Current file: {episode.fullpath}")
-    print("Please enter series name:")
-    return input().strip()
+    return input("Please enter series name:").strip()
 
 
 def process_file(tvdb_instance, episode):
@@ -238,8 +237,7 @@ def get_episode_name_maybe_prompt(tvdb_instance, episode):
                 if len(force_name) > 1:
                     retries += 1
                 else:
-                    print("series id:")
-                    series_id = input().strip()
+                    series_id = input("series id:").strip()
                     if len(series_id) > 1:
                         Config["series_id"] = series_id
                         retries += 1

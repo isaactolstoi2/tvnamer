@@ -274,7 +274,7 @@ class FileParser(object):
         Returns an EpisodeInfo instance containing extracted data.
         """
         _, filename = os.path.split(self.path)
-
+        filename, ext = split_extension(filename)
         filename = _apply_replacements_input(filename)
 
         for cmatcher in self.compiled_regexs:
