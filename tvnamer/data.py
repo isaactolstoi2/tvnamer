@@ -22,26 +22,39 @@ from tvnamer.utils import (
     format_episode_numbers,
     make_valid_filename,
     split_extension,
-    _apply_replacements, # FIXME
+    _apply_replacements,  # FIXME
 )
+import tvdb_v4_official
 
 LOG = logging.getLogger(__name__)
 
 
-
 def _get_series(tvdb_instance, series_id):
     # type: (Any, int) -> Optional[Dict[str, Any]]
-    """Fetch a series record by v4 id. Returns None when the id does not
-    exist (e.g. a stale v1-v3 id from an old kvstore).
+    """Fetch an extended series record by v4 id. Returns None when the id
+    does not exist (e.g. a stale v1-v3 id from an old kvstore).
+
+    The season types available for the series (deduplicated, sorted by id)
+    are stored on the record under the "season_types" key, as a list of
+    {"id": ..., "name": ...} dicts (e.g. Aired Order, DVD Order, ...).
     """
     try:
-        return tvdb_instance.get_series(int(series_id))
+        series = tvdb_instance.get_series_extended(int(series_id))
     except urllib.error.URLError as e:
         raise DataRetrievalError("Error with www.thetvdb.com: %s" % e)
     except ValueError as e:
         # API-level failure, includes unknown ids
         LOG.warning("series id %s lookup failed: %s", series_id, e)
         return None
+    season_types = {}  # type: Dict[int, Optional[str]]
+    for season in series.get("seasons") or []:
+        stype = season.get("type") or {}
+        if stype.get("id") is not None:
+            season_types[stype["id"]] = stype.get("name")
+    series["season_types"] = [
+        {"id": type_id, "name": name} for type_id, name in sorted(season_types.items())
+    ]
+    return series
 
 
 def _search_series_id(tvdb_instance, name):
@@ -116,11 +129,57 @@ def _fetch_episodes(tvdb_instance, series_id, season_type="default"):
     return episodes
 
 
+# Maps v4 season type ids (as stored in series["season_types"]) to the
+# slugs used by the /series/{id}/episodes/{season-type} endpoint
+_SEASON_TYPE_SLUGS = {
+    1: "default",    # Aired Order
+    2: "dvd",        # DVD Order
+    3: "absolute",   # Absolute Order
+    4: "alternate",  # Alternate Order
+    5: "regional",   # Regional Order
+    6: "altdvd",     # Alternate DVD Order
+}
+
+
 def _season_type():
     # type: () -> str
     """Maps the 'order' config to a v4 season type.
     """
     return "dvd" if Config["order"] == "dvd" else "default"
+
+
+def _find_episode_in_alternate_season_types(
+    tvdb_instance, series, seasonnumber, cepno, episodes_by_type
+):
+    # type: (Any, Dict[str, Any], int, int, Dict[str, List[Dict[str, Any]]]) -> Optional[Dict[str, Any]]
+    """Search all season types available for the series (other than those
+    already fetched) for the given episode. Returns the first match found,
+    or None. Fetched episode lists are cached in episodes_by_type.
+    """
+    for stype in series.get("season_types") or []:
+        slug = _SEASON_TYPE_SLUGS.get(stype.get("id"))
+        if slug is None or slug in episodes_by_type:
+            continue
+        try:
+            episodes_by_type[slug] = _fetch_episodes(tvdb_instance, series["id"], slug)
+        except DataRetrievalError as e:
+            LOG.warning("could not fetch %s order for %s: %s", slug, series.get("name"), e)
+            episodes_by_type[slug] = []
+            continue
+        match = next(
+            (
+                ep
+                for ep in episodes_by_type[slug]
+                if ep.get("seasonNumber") == seasonnumber and ep.get("number") == cepno
+            ),
+            None,
+        )
+        if match is not None:
+            LOG.info(
+                "episode found in %s (%s) order", stype.get("name"), slug
+            )
+            return match
+    return None
 
 
 def _replace_output_series_name(seriesname):
@@ -133,7 +192,6 @@ def _replace_output_series_name(seriesname):
     """
 
     return Config['output_series_replacements'].get(seriesname, seriesname)
-
 
 
 def _apply_replacements_output(cfile):
@@ -294,7 +352,7 @@ class BaseInfo(metaclass=ABCMeta):
         """
         raise NotImplemented # pragma: nocover
 
-    def populate_from_tvdb(self, tvdb_instance, force_name=None, series_id=None):
+    def populate_from_tvdb(self, tvdb_instance: tvdb_v4_official, force_name=None, series_id=None):
         # type: (Any, Optional[Any], Optional[Any]) -> None
         """Queries the tvdb_v4_official.TVDB instance for episode name and
         corrected series name.
@@ -360,7 +418,8 @@ class BaseInfo(metaclass=ABCMeta):
         else:
             seasonnumber = self.seasonnumber
 
-        episodes = _fetch_episodes(tvdb_instance, series['id'], _season_type())
+        episodes_by_type = {_season_type(): _fetch_episodes(tvdb_instance, series['id'], _season_type())}
+        episodes = episodes_by_type[_season_type()]
 
         epnames = []
         for cepno in self.episodenumbers:
@@ -376,10 +435,16 @@ class BaseInfo(metaclass=ABCMeta):
             if episodeinfo is None and not any(
                 ep.get("seasonNumber") == seasonnumber for ep in episodes
             ):
-                raise SeasonNotFound(
-                    "Season %s of show %s could not be found"
-                    % (seasonnumber, self.seriesname)
+                # Season missing in the configured order - try all other
+                # season types available for the series, first match wins
+                episodeinfo = _find_episode_in_alternate_season_types(
+                    tvdb_instance, series, seasonnumber, cepno, episodes_by_type
                 )
+                if episodeinfo is None:
+                    raise SeasonNotFound(
+                        "Season %s of show %s could not be found"
+                        % (seasonnumber, self.seriesname)
+                    )
 
             if episodeinfo is None:
                 # Try to search by absolute number
