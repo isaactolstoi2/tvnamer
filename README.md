@@ -2,7 +2,7 @@
 
 [![PyPI][pypi-img]][pypi-link] [![Build Status][build-img]][build-link] [![codecov][coverage-img]][coverage-link]
 
-`tvnamer` is a utility to rename files from `some.show.s01e03.blah.abc.avi` to `Some Show - [01x03] - The Episode Name.avi` (by retrieving the episode name using data from [`tvdb_api`](http://github.com/dbr/tvdb_api))
+`tvnamer` is a utility to rename files from `some.show.s01e03.blah.abc.avi` to `Some Show - [01x03] - The Episode Name.avi` (by retrieving the episode name using data from [TheTVDB v4 API](https://thetvdb.com/api-information) via [`tvdb_v4_official`](https://github.com/thetvdb/tvdb-v4-python))
 
 It supports Python 3.5 onwards. The last version of tvnamer to support Python 2.7 was `tvnamer==3`
 
@@ -61,9 +61,6 @@ For example:
     # Starting tvnamer
     # Found 1 episodes
     # Processing brass.eye.s01e01.avi
-    TVDB Search Results:
-    1 -> Brass Eye [en] # http://thetvdb.com/?tab=series&id=70679&lid=7
-    Automatically selecting only result
     ####################
     # Old filename: brass.eye.s01e01.avi
     # New filename: Brass Eye - [01x01] - Animals.avi
@@ -72,23 +69,10 @@ For example:
 
 Enter `y` then press `return` and the file will be renamed to "Brass Eye - [01x01] - Animals.avi". You can also simply press `return` to select the default option, denoted by the surrounding `[]`
 
-If there are multiple shows with the same (or similar) names or languages, you will be asked to select the correct one - "Lost" is a good example of this:
+If there are multiple shows with the same (or similar) names, the first search result is used. To use a different show, either override the parsed series name with `--name` or specify the exact TheTVDB series id with `--series-id`:
 
-    $ tvnamer lost.s01e01.avi
-    ####################
-    # Starting tvnamer
-    # Found 1 episodes
-    # Processing lost.s01e01.avi
-    TVDB Search Results:
-    1 -> Lost [en] # http://thetvdb.com/?tab=series&id=73739&lid=7
-    2 -> Lost [sv] # http://thetvdb.com/?tab=series&id=73739&lid=8
-    3 -> Lost [no] # http://thetvdb.com/?tab=series&id=73739&lid=9
-    4 -> Lost [fi] # http://thetvdb.com/?tab=series&id=73739&lid=11
-    5 -> Lost [nl] # http://thetvdb.com/?tab=series&id=73739&lid=13
-    6 -> Lost [de] # http://thetvdb.com/?tab=series&id=73739&lid=14
-    Enter choice (first number, ? for help):
-
-To select the first result, enter `1` then `return`, to select the second enter `2` and so on. The link after `#` goes to the relevant [thetvdb.com][tvdb] page, which will contain information and images to help you select the correct series.
+    $ tvnamer --name "Lost (2004)" lost.s01e01.avi
+    $ tvnamer --series-id 73739 lost.s01e01.avi
 
 You can rename multiple files, or an entire directory by using the files or directories as arguments:
 

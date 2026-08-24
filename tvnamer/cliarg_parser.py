@@ -71,6 +71,8 @@ def get_cli_parser(defaults):
         g.add_option("-n", "--name", action="store", dest="force_name", help="override the parsed series name with this (applies to all files)")
         g.add_option("--series-id", action="store", dest="series_id", help="explicitly set the show id for TVdb to use (applies to all files)")
         g.add_option("--order", action="store", dest="order", help="set the TvDB episode order ('aired' [default] or 'dvd')")
+        g.add_option("--tvdb-api-key", action="store", dest="tvdb_api_key", help="custom TVDB v4 API key")
+        g.add_option("--tvdb-pin", action="store", dest="tvdb_pin", help="TVDB v4 subscriber PIN")
         g.add_option("-l", "--lang", action="store", dest="language", help="set the language used to retrieve data")
 
     # Misc

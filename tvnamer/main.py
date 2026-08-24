@@ -3,7 +3,6 @@
 """Main tvnamer utility functionality"""
 
 import os
-from pathlib import Path
 import sys
 import logging
 import warnings
@@ -15,7 +14,7 @@ except ImportError:
 
 import json
 
-import tvdb_api
+import tvdb_v4_official
 from typing import List, Union, Optional
 
 from tvnamer import cliarg_parser, __version__
@@ -52,7 +51,10 @@ LOG = logging.getLogger(__name__)
 
 
 # Key for use in tvnamer only - other keys can easily be registered at https://thetvdb.com/api-information
-TVNAMER_API_KEY = "fb51f9b848ffac9750bada89ecba0225"
+# Note: must be a key for the TheTVDB v4 API
+TVNAMER_API_KEY = "69d4a806-0aa5-4f22-b5a0-3d2411caa184"
+# PIN for the bundled key, if required - can be overridden with the tvdb_pin config option
+TVNAMER_API_PIN = ""
 
 
 def get_move_destination(episode):
@@ -174,8 +176,12 @@ def lookup_previous_choice(should_lookup: bool, fullfilename: str):
 
 
 def store_new_choice(fullfilename, seriesid, episode: EpisodeInfo):
+    if not seriesid:
+        # Don't store anything until the series is known
+        return
     LOG.debug(f"kvstore store {fullfilename}: {seriesid}")
-    season = "00" if isinstance(episode, NoSeasonEpisodeInfo) else str(episode.seasonnumber)
+    season = "00" if isinstance(
+        episode, NoSeasonEpisodeInfo) else str(episode.seasonnumber)
 
     database.upsert(
         fullfilename,
@@ -192,7 +198,7 @@ def ask_for_seriesname(episode):
 
 
 def process_file(tvdb_instance, episode):
-    # type: (tvdb_api.Tvdb, BaseInfo) -> None
+    # type: (tvdb_v4_official.TVDB, BaseInfo) -> None
     """Gets episode name, prompts user for input"""
     episode = get_episode_name_maybe_prompt(tvdb_instance, episode)
     if episode is None:
@@ -217,8 +223,10 @@ def get_episode_name_maybe_prompt(tvdb_instance, episode):
         if Config["force_name"] is not None:
             episode.seriesname = Config["force_name"]
 
-        LOG.info("# Detected series: %s (%s)" % (episode.seriesname, episode.number_string()))
-        series_id = Config["series_id"] or lookup_previous_choice(Config["remember_choice"], episode.fullfilename)
+        LOG.info("# Detected series: %s (%s)" %
+                 (episode.seriesname, episode.number_string()))
+        series_id = Config["series_id"] or lookup_previous_choice(
+            Config["remember_choice"], episode.fullfilename)
         try:
             episode.populate_from_tvdb(
                 tvdb_instance,
@@ -273,7 +281,8 @@ def get_episode_name_maybe_prompt(tvdb_instance, episode):
             LOG.warning("%s" % (errormsg))
         retries -= 1
     if "seriesid" in episode.__dict__:
-        store_new_choice(episode.fullfilename, episode.seriesid or None, episode)
+        store_new_choice(episode.fullfilename,
+                         episode.seriesid or None, episode)
     return episode
 
 
@@ -296,24 +305,29 @@ def generate_filename_and_rename(episode):
 
         if len(Config["output_filename_replacements"]) > 0:
             # Show filename without replacements
-            LOG.info("Before custom output replacements: %s" % (episode.generate_filename(preview_orig_filename=True)))
+            LOG.info("Before custom output replacements: %s" %
+                     (episode.generate_filename(preview_orig_filename=True)))
         # check collisions
         collision = database.find_by_newname(new_name)
         if collision is not None and collision[0].fullfilename != episode.fullfilename:
             # if we did not see this source yet, but the destination is in the database we have another version of the same episode, append something
             # if we saw this file already, as such nothing to do but the destination could have been deleted, which is checked in do_file_operation so let it continue
             new_name = episode.generate_filename(add_variant=True)
-        database.upsert(episode.fullfilename, newfilename=new_name)
+        if getattr(episode, "seriesid", None):
+            # Only store the new filename once the series is known
+            database.upsert(episode.fullfilename, newfilename=new_name)
         LOG.debug("New filename: %s" % new_name)
 
         if Config["dry_run"]:
-            LOG.debug("%s will be %s'ed to %s" % (episode.fullfilename, Config["mode"], new_name))
+            LOG.debug("%s will be %s'ed to %s" %
+                      (episode.fullfilename, Config["mode"], new_name))
             return
         if Config["always_rename"] == False:
             should_rename = ask_for_rename()
 
     if should_rename:
-        do_file_operation(cnamer, Config["mode"], dest_dir=None, dest_filepath=new_name)
+        do_file_operation(cnamer, Config["mode"],
+                          dest_dir=None, dest_filepath=new_name)
 
 
 def ask_for_rename():
@@ -392,16 +406,11 @@ def tvnamer(paths, show_progress):
     if len(episodes_found) == 0:
         raise NoValidFilesFoundError()
 
-    LOG.info("# Found %d episode" % len(episodes_found) + ("s" * (len(episodes_found) > 1)))
+    LOG.info("# Found %d episode" % len(episodes_found) +
+             ("s" * (len(episodes_found) > 1)))
 
     # Sort episodes by series name, season and episode number
     episodes_found.sort(key=lambda x: x.sortable_info())
-
-    # episode sort order
-    if Config["order"] == "dvd":
-        dvdorder = True
-    else:
-        dvdorder = False
 
     if Config["tvdb_api_key"] is not None:
         LOG.debug("Using custom API key from config")
@@ -410,23 +419,15 @@ def tvnamer(paths, show_progress):
         LOG.debug("Using tvnamer default API key")
         api_key = TVNAMER_API_KEY
 
-    if os.getenv("TVNAMER_TEST_MODE", "0") == "1":
-        from .test_cache import get_test_cache_session
-
-        cache = get_test_cache_session()
-    else:
-        if Config["kvstore"]:
-            cache = str(Path(Config["kvstore"]).parent)
-        else:
-            cache = True
-
-    tvdb_instance = tvdb_api.Tvdb(
-        interactive=not Config["select_first"],
-        language=Config["language"],
-        dvdorder=dvdorder,
-        cache=cache,
-        apikey=api_key,
-    )
+    try:
+        tvdb_instance = tvdb_v4_official.TVDB(
+            apikey=api_key, pin=Config["tvdb_pin"] or TVNAMER_API_PIN
+        )
+    except Exception as e:
+        raise DataRetrievalError(
+            "Failed to authenticate with www.thetvdb.com: %s "
+            "(check the tvdb_api_key and tvdb_pin config options)" % e
+        )
 
     progress = 0
     progress_printed = -0.1  # initialized to negative value. emits progress once at start
@@ -453,7 +454,13 @@ def main():
 
     if opts.show_version:
         print("tvnamer version: %s" % (__version__,))
-        print("tvdb_api version: %s" % (tvdb_api.__version__,))
+        try:
+            from importlib.metadata import version as _pkg_version
+
+            tvdb_client_version = _pkg_version("tvdb_v4_official")
+        except Exception:
+            tvdb_client_version = "unknown"
+        print("tvdb_v4_official version: %s" % (tvdb_client_version,))
         print("python version: %s" % (sys.version,))
         sys.exit(0)
 
@@ -472,7 +479,8 @@ def main():
 
     # If a config is specified, load it, update the defaults using the loaded
     # values, then reparse the options with the updated defaults.
-    default_configuration = os.path.expanduser("~/.config/tvnamer/tvnamer.json")
+    default_configuration = os.path.expanduser(
+        "~/.config/tvnamer/tvnamer.json")
     old_default_configuration = os.path.expanduser("~/.tvnamer.json")
 
     if opts.loadconfig is not None:
@@ -491,8 +499,10 @@ def main():
     if config_to_load is not None:
         LOG.info("Loading config: %s" % (config_to_load))
         if os.path.isfile(old_default_configuration):
-            LOG.warning("WARNING: you have a config at deprecated ~/.tvnamer.json location.")
-            LOG.warning("Config must be moved to new location: ~/.config/tvnamer/tvnamer.json")
+            LOG.warning(
+                "WARNING: you have a config at deprecated ~/.tvnamer.json location.")
+            LOG.warning(
+                "Config must be moved to new location: ~/.config/tvnamer/tvnamer.json")
 
         try:
             loaded_config = json.load(open(os.path.expanduser(config_to_load)))
@@ -535,7 +545,8 @@ def main():
     Config.update(opts.__dict__)
 
     if Config["titlecase_filename"] and Config["lowercase_filename"]:
-        LOG.warning("Setting 'lowercase_filename' clobbers 'titlecase_filename' option")
+        LOG.warning(
+            "Setting 'lowercase_filename' clobbers 'titlecase_filename' option")
 
     if len(args) == 0:
         opter.error("No filenames or directories supplied")
@@ -543,6 +554,8 @@ def main():
     try:
         database.init_database(Config)
         tvnamer(paths=sorted(args), show_progress=opts.progress or False)
+    except DataRetrievalError as errormsg:
+        opter.error(str(errormsg))
     except NoValidFilesFoundError:
         opter.error("No valid files were supplied")
     except UserAbort as errormsg:

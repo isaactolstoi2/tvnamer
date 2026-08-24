@@ -12,8 +12,6 @@ import logging
 import platform
 import errno
 
-from tvdb_api import Tvdb
-
 import tvnamer
 from tvnamer.config import Config
 from tvnamer.tvnamer_exceptions import (
@@ -133,7 +131,7 @@ def make_valid_filename(
         blacklist = "" if blacklist is None else blacklist #fix type warning
         blacklist += custom_blacklist
 
-    if blacklist is not None:
+    if blacklist:
         # Replace every blacklisted character with a underscore
         value = re.sub("[%s]" % re.escape(blacklist), replace_with, value)
 

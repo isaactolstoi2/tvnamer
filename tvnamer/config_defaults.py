@@ -16,6 +16,7 @@ if typing.TYPE_CHECKING:
 
     TypedDefaults = typing.TypedDict('TypedDefaults', {
         'tvdb_api_key': Optional[str],
+        'tvdb_pin': Optional[str],
         'mode': str,
         'remember_choice':bool,
         'kvstore':str,
@@ -77,7 +78,11 @@ if typing.TYPE_CHECKING:
 # fmt: off
 defaults = {
     # Custom API key from www.thetvdb.com - if None, uses tvnamer's default key
+    # Note: must be a key for the TheTVDB v4 API
     'tvdb_api_key': None,
+
+    # Subscriber PIN for the TheTVDB v4 API (required by some API keys)
+    'tvdb_pin': None,
 
     # mode can be move, copy, symlink
     'mode': 'move',

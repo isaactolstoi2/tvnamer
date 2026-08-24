@@ -2,6 +2,12 @@
 
 # `4.0` - unreleased
 - Dropped support for EOL Python 2.7.
+- Migrated from the deprecated `tvdb_api` package to the official TheTVDB v4 API client `tvdb_v4_official`. Breaking changes:
+  - A TheTVDB **v4** API key is required; old v1-v3 API keys (and the previously bundled key) no longer work. Keys can be registered at <https://thetvdb.com/api-information> and set via the `tvdb_api_key` config option / `--tvdb-api-key`.
+  - New `tvdb_pin` config option / `--tvdb-pin` for keys which require a subscriber PIN.
+  - Interactive series selection was removed; the first search result is used. Use `--name` or `--series-id` to disambiguate. `select_first` is now a no-op.
+  - Series ids stored in existing `kvstore.sqlite` databases are v1-v3 ids and are invalid for the v4 API; affected entries fall back to name search and are re-stored with v4 ids.
+  - `TVNAMER_TEST_MODE` HTTP-cache support was removed pending rework of the test suite.
 - Fix `TypeError: '<' not supported between instances of 'int' and 'str'` error when using series replacements with show-ID
   ([Issue #150](https://github.com/dbr/tvnamer/issues/150))
 - No longer supported filename patterns. These are ambigious and cause incorrect matches with things like `H.264` in filenames

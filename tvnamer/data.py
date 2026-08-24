@@ -2,10 +2,9 @@ import logging
 import os
 import re
 import datetime
+import urllib.error
 from abc import ABCMeta, abstractmethod
 from typing import Optional, Dict, List, Union, Tuple, Any
-
-import tvdb_api
 
 from tvnamer.config import Config
 from tvnamer.tvnamer_exceptions import (
@@ -28,6 +27,100 @@ from tvnamer.utils import (
 
 LOG = logging.getLogger(__name__)
 
+
+
+def _get_series(tvdb_instance, series_id):
+    # type: (Any, int) -> Optional[Dict[str, Any]]
+    """Fetch a series record by v4 id. Returns None when the id does not
+    exist (e.g. a stale v1-v3 id from an old kvstore).
+    """
+    try:
+        return tvdb_instance.get_series(int(series_id))
+    except urllib.error.URLError as e:
+        raise DataRetrievalError("Error with www.thetvdb.com: %s" % e)
+    except ValueError as e:
+        # API-level failure, includes unknown ids
+        LOG.warning("series id %s lookup failed: %s", series_id, e)
+        return None
+
+
+def _search_series_id(tvdb_instance, name):
+    # type: (Any, str) -> int
+    """Search for a series by name, returns the v4 id of the first result.
+    """
+    try:
+        results = tvdb_instance.search(name, type="series")
+    except (urllib.error.URLError, ValueError) as e:
+        raise DataRetrievalError("Error with www.thetvdb.com: %s" % e)
+    if not results:
+        raise ShowNotFound("Show %s not found on www.thetvdb.com" % name)
+    return int(results[0]["tvdb_id"])
+
+
+def _series_name(tvdb_instance, series):
+    # type: (Any, Dict[str, Any]) -> Optional[str]
+    """Series name, localized via the translation endpoint when a non-English
+    language is configured, with fallback to the default name.
+    """
+    name = series.get("name")
+    language = Config["language"]
+    if language and language != "en":
+        try:
+            trans = tvdb_instance.get_series_translation(series["id"], language)
+        except (urllib.error.URLError, ValueError):
+            trans = None
+        if trans and trans.get("name"):
+            name = trans["name"]
+    return name
+
+
+def _fetch_episodes_lang(tvdb_instance, series_id, season_type, language):
+    # type: (Any, int, str, Optional[str]) -> List[Dict[str, Any]]
+    """Fetch all episodes of a series (all pages) for a season type.
+    """
+    episodes = []  # type: List[Dict[str, Any]]
+    page = 0
+    while True:
+        try:
+            data = tvdb_instance.get_series_episodes(
+                series_id, season_type=season_type, page=page, lang=language
+            )
+        except (urllib.error.URLError, ValueError) as e:
+            raise DataRetrievalError("Error with www.thetvdb.com: %s" % e)
+        if not data:
+            break
+        episodes.extend(data.get("episodes") or [])
+        links = tvdb_instance.get_req_links() or {}
+        if not links.get("next"):
+            break
+        page += 1
+    return episodes
+
+
+def _fetch_episodes(tvdb_instance, series_id, season_type="default"):
+    # type: (Any, int, str) -> List[Dict[str, Any]]
+    """Fetch all episodes, in the configured language. Missing translated
+    episode names are filled in from the default language.
+    """
+    language = Config["language"]
+    if language in (None, "en"):
+        return _fetch_episodes_lang(tvdb_instance, series_id, season_type, None)
+
+    episodes = _fetch_episodes_lang(tvdb_instance, series_id, season_type, language)
+    if any(not ep.get("name") for ep in episodes):
+        default_eps = _fetch_episodes_lang(tvdb_instance, series_id, season_type, None)
+        default_names = {ep.get("id"): ep.get("name") for ep in default_eps}
+        for ep in episodes:
+            if not ep.get("name"):
+                ep["name"] = default_names.get(ep.get("id"))
+    return episodes
+
+
+def _season_type():
+    # type: () -> str
+    """Maps the 'order' config to a v4 season type.
+    """
+    return "dvd" if Config["order"] == "dvd" else "default"
 
 
 def _replace_output_series_name(seriesname):
@@ -202,64 +295,62 @@ class BaseInfo(metaclass=ABCMeta):
         raise NotImplemented # pragma: nocover
 
     def populate_from_tvdb(self, tvdb_instance, force_name=None, series_id=None):
-        # mypy: ignore # type: (tvdb_api.Tvdb, Optional[Any], Optional[Any]) -> None
-        """Queries the tvdb_api.Tvdb instance for episode name and corrected
-        series name.
-        If series cannot be found, it will warn the user. If the episode is not
-        found, it will use the corrected show name and not set an episode name.
-        If the site is unreachable, it will warn the user. If the user aborts
-        it will catch tvdb_api's user abort error and raise tvnamer's
+        # type: (Any, Optional[Any], Optional[Any]) -> None
+        """Queries the tvdb_v4_official.TVDB instance for episode name and
+        corrected series name.
+        Raises ShowNotFound if the series cannot be found, SeasonNotFound /
+        EpisodeNotFound / EpisodeNameNotFound for missing episode data, and
+        DataRetrievalError if the site is unreachable.
         """
 
         # FIXME: MOve this into each subclass - too much hasattr/isinstance
-        try:
-            if series_id is None:
-                print(f"not in cache: series:{self.seriesname}, loc:{self.fullpath}")
-                LOG.info(f"not in cache: series:{self.seriesname}, loc:{self.fullpath}")
-                show = tvdb_instance[force_name or self.seriesname]
-            else:
-                series_id = int(series_id)
-                show = tvdb_instance[series_id]
-                if show is None:
-                    LOG.debug("series_id was given but nothing returend from tvdb")
-            if show is None:
-                print("Enter search term or [Enter] to skip:")
-                search_term = input()
-                if len(search_term)==0:
-                    raise tvdb_api.TvdbShowNotFound("User chose to skip")
-                show = tvdb_instance[search_term]
-        except tvdb_api.TvdbError as errormsg:
-            raise DataRetrievalError("Error with www.thetvdb.com: %s" % errormsg)
-        except tvdb_api.TvdbShowNotFound:
-            # No such series found.
-            raise ShowNotFound("Show %s not found on www.thetvdb.com" % self.seriesname)
-        except tvdb_api.TvdbUserAbort as error:
-            raise UserAbort("%s" % error)
-        else:
-            # Series was found, use corrected series name
-            self.seriesname = _replace_output_series_name(show['seriesName'])
-            self.seriesid = show.data['id']
+        series = None
+        if series_id is not None:
+            series = _get_series(tvdb_instance, int(series_id))
+            if series is None:
+                # Stale/invalid id (e.g. a v1-v3 id from an old kvstore),
+                # fall back to searching by name
+                LOG.warning(
+                    "series id %s not found on www.thetvdb.com, falling back to name search",
+                    series_id,
+                )
+
+        if series is None:
+            print(f"not in cache: series:{self.seriesname}, loc:{self.fullpath}")
+            LOG.info(f"not in cache: series:{self.seriesname}, loc:{self.fullpath}")
+            series_id = _search_series_id(tvdb_instance, force_name or self.seriesname)
+            series = _get_series(tvdb_instance, series_id)
+            if series is None:
+                raise ShowNotFound(
+                    "Show %s not found on www.thetvdb.com" % (force_name or self.seriesname)
+                )
+
+        # Series was found, use corrected series name
+        self.seriesname = _replace_output_series_name(_series_name(tvdb_instance, series))
+        self.seriesid = series['id']
 
         if isinstance(self, DatedEpisodeInfo):
-            # Date-based episode
+            # Date-based episode (always in aired order)
+            dated_episodes = _fetch_episodes(tvdb_instance, series['id'], "default")
             epnames = []
             for cepno in self.episodenumbers:
-                try:
-                    sr = show.aired_on(cepno)
-                    if len(sr) > 1:
-                        # filter out specials if multiple episodes aired on the day
-                        sr = [s for s in sr if s['seasonnumber'] != '0']
+                sr = [ep for ep in dated_episodes if ep.get("aired") == str(cepno)]
+                if len(sr) > 1:
+                    # filter out specials if multiple episodes aired on the day
+                    sr = [s for s in sr if s.get("seasonNumber") != 0]
 
-                    if len(sr) > 1:
-                        raise EpisodeNotFound(
-                            "Ambigious air date %s, there were %s episodes on that day"
-                            % (cepno, len(sr))
-                        )
-                    epnames.append(sr[0]['episodeName'])
-                except tvdb_api.TvdbEpisodeNotFound:
+                if len(sr) > 1:
+                    raise EpisodeNotFound(
+                        "Ambigious air date %s, there were %s episodes on that day"
+                        % (cepno, len(sr))
+                    )
+                if len(sr) == 0:
                     raise EpisodeNotFound(
                         "Episode that aired on %s could not be found" % (cepno)
                     )
+                if not sr[0].get("name"):
+                    raise EpisodeNameNotFound("Could not find episode name for %s" % cepno)
+                epnames.append(sr[0]['name'])
             self.episodename = epnames # Optional[List[str]]
             return
 
@@ -269,45 +360,41 @@ class BaseInfo(metaclass=ABCMeta):
         else:
             seasonnumber = self.seasonnumber
 
+        episodes = _fetch_episodes(tvdb_instance, series['id'], _season_type())
+
         epnames = []
         for cepno in self.episodenumbers:
-            try:
-                episodeinfo = show[seasonnumber][cepno]
+            episodeinfo = next(
+                (
+                    ep
+                    for ep in episodes
+                    if ep.get("seasonNumber") == seasonnumber and ep.get("number") == cepno
+                ),
+                None,
+            )
 
-            except tvdb_api.TvdbSeasonNotFound:
+            if episodeinfo is None and not any(
+                ep.get("seasonNumber") == seasonnumber for ep in episodes
+            ):
                 raise SeasonNotFound(
                     "Season %s of show %s could not be found"
                     % (seasonnumber, self.seriesname)
                 )
 
-            except tvdb_api.TvdbEpisodeNotFound:
+            if episodeinfo is None:
                 # Try to search by absolute number
-                sr = show.search(cepno, "absoluteNumber")
-                if len(sr) > 1:
-                    # For multiple results try and make sure there is a direct match
-                    unsure = True
-                    for e in sr:
-                        if int(e['absoluteNumber']) == cepno:
-                            epnames.append(e['episodeName'])
-                            unsure = False
-                    # If unsure error out
-                    if unsure:
-                        raise EpisodeNotFound(
-                            "No episode actually matches %s, found %s results instead"
-                            % (cepno, len(sr))
-                        )
-                elif len(sr) == 1:
-                    epnames.append(sr[0]['episodeName'])
+                sr = [ep for ep in episodes if ep.get("absoluteNumber") == cepno]
+                if len(sr) > 0:
+                    episodeinfo = sr[0]
                 else:
                     raise EpisodeNotFound(
                         "Episode %s of show %s, season %s could not be found (also tried searching by absolute episode number)"
                         % (cepno, self.seriesname, seasonnumber)
                     )
 
-            except tvdb_api.TvdbAttributeNotFound:
+            if not episodeinfo.get("name"):
                 raise EpisodeNameNotFound("Could not find episode name for %s" % cepno)
-            else:
-                epnames.append(episodeinfo['episodeName'])
+            epnames.append(episodeinfo['name'])
 
         self.episodename = epnames
 
