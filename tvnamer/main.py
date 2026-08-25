@@ -422,7 +422,10 @@ def tvnamer(paths, show_progress):
     progress_printed = -0.1  # initialized to negative value. emits progress once at start
     progress_total = len(episodes_found)
     for i, episode in enumerate(episodes_found):
-        process_file(tvdb_instance, episode)
+        try:
+            process_file(tvdb_instance, episode)
+        except Exception as e:
+            LOG.error("Error processing file %s: %s" % (episode.fullfilename, e))
         if show_progress:
             progress = i / progress_total
             if (progress - progress_printed) > 0.05:
