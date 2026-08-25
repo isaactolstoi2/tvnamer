@@ -15,10 +15,7 @@ classifiers = [
     "Topic :: Multimedia",
     "Topic :: Utilities",
 ]
-dependencies = [
-    "tvdb_v4_official",
-    "sqlalchemy",
-]
+dependencies = ["tvdb_v4_official", "sqlalchemy"]
 
 [project.scripts]
 tvnamer = "tvnamer.main:main"
@@ -28,4 +25,4 @@ Homepage = "http://github.com/dbr/tvnamer"
 
 
 [tool.black]
-line-length = 120
+line-length = 150
